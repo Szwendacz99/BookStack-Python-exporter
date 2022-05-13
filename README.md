@@ -1,7 +1,15 @@
 # BookStack-Python-exporter
 Customizable script for exporting notes from BookStack through API
 
-This script allows you to export Pages in any format available in BookStack's API (can choose multiple formats at once).  
+#### Features:
+- export keeping the tree structure by making folders from Shelves, Books and Chapters
+- export multiple formats at once
+- customizable path for placing exported notes
+- authorization token is loaded from txt file
+
+Requirements:
+- Python at least in version 3.6
+- requests python library
 
 Full example on how to use the script:
 1. Clone the repo 
