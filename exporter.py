@@ -156,7 +156,7 @@ for chapter_data in api_get_dict('chapters').get('data'):
 info("Getting info about Pages")
 for page_data in api_get_dict('pages').get('data'):
     parent_id = page_data.get('chapter_id')
-    if parent_id == 0:
+    if parent_id not in chapters.keys():
         parent_id = page_data.get('book_id')
         info(f"Page \"{page_data.get('name')}\" is not in any chapter, "
              f"using Book \"{books.get(parent_id).get_name()}\" as a parent.")
