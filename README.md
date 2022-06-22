@@ -9,7 +9,6 @@ Customizable script for exporting notes from BookStack through API
 
 Requirements:
 - Python at least in version 3.6
-- requests python library
 
 Full example on how to use the script:
 1. Clone the repo 

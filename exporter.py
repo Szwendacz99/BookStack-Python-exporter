@@ -4,15 +4,13 @@ import logging
 import os
 from logging import info, error
 from pathlib import Path
-
-import requests
-from requests import Response
+from urllib.request import urlopen, Request
 
 logging.basicConfig(format='%(levelname)s :: %(message)s', level=logging.INFO)
 
 # (formatName, fileExtension)
 FORMATS: dict['str', 'str'] = {
-    'md': 'md',
+    'markdown': 'md',
     'plaintext': 'txt',
     'pdf': 'pdf',
     'html': 'html'
@@ -31,6 +29,10 @@ parser.add_argument('-f', '--formats', type=str, default='md',
 args = parser.parse_args()
 
 formats = args.formats.split(',')
+for frmt in formats:
+    if frmt not in FORMATS.keys():
+        raise Exception("Unknown format name (NOT file extension), "
+                        "check api docs for current version of your BookStack")
 
 API_PREFIX: str = f"{args.host.removesuffix(os.path.sep)}/api"
 FS_PATH: str = args.path.removesuffix(os.path.sep)
@@ -80,24 +82,29 @@ def make_dir(path: str):
     path_obj.mkdir(exist_ok=True, parents=True)
 
 
-def api_get(path: str) -> dict:
-    response: Response = requests.get(f'{API_PREFIX}/{path}', headers=HEADERS)
+def api_get_bytes(path: str) -> bytes:
+    request: Request = Request(f'{API_PREFIX}/{path}', headers=HEADERS)
 
-    if response.status_code == 403:
-        error("403 Forbidden, check your token!")
-        exit(response.status_code)
+    with urlopen(request) as response:
+        response = response
+        if response.status == 403:
+            error("403 Forbidden, check your token!")
+            exit(response.status)
 
-    data: dict = json.loads(response.text)
-    return data
+        return response.read()
+
+
+def api_get_dict(path: str) -> dict:
+    return json.loads(api_get_bytes(path).decode())
 
 
 info("Getting info about Shelves and their Books")
 
-for shelf_data in api_get('shelves').get('data'):
+for shelf_data in api_get_dict('shelves').get('data'):
     shelf = Node(shelf_data.get('name'), None, shelf_data.get('id'))
     shelves[shelf.get_id()] = shelf
 
-    shelf_details = json.loads(requests.get(f'{API_PREFIX}/shelves/{shelf.get_id()}', headers=HEADERS).text)
+    shelf_details = api_get_dict(f'shelves/{shelf.get_id()}')
 
     if shelf_details.get('books') is None:
         continue
@@ -107,7 +114,7 @@ for shelf_data in api_get('shelves').get('data'):
 
 info("Getting info about Books not belonging to any shelf")
 
-for book_data in api_get('books').get('data'):
+for book_data in api_get_dict('books').get('data'):
     if book_data.get('id') != 0:
         continue
     book = Node(book_data.get('name'), None, book_data.get('id'))
@@ -116,12 +123,12 @@ for book_data in api_get('books').get('data'):
 
 info("Getting info about Chapters")
 
-for chapter_data in api_get('chapters').get('data'):
+for chapter_data in api_get_dict('chapters').get('data'):
     chapter = Node(chapter_data.get('name'), books.get(chapter_data.get('book_id')), chapter_data.get('id'))
     chapters[chapter.get_id()] = chapter
 
 info("Getting info about Pages")
-for page_data in api_get('pages').get('data'):
+for page_data in api_get_dict('pages').get('data'):
     parent_id = page_data.get('chapter_id')
     if parent_id == 0:
         parent_id = page_data.get('book_id')
@@ -140,10 +147,10 @@ for page in pages.values():
     for frmt in formats:
         path: str = f"{FS_PATH}{os.path.sep}{page.get_path()}{os.path.sep}{page.get_name()}.{FORMATS[frmt]}"
 
-        result: Response = requests.get(f'{API_PREFIX}/pages/{page.get_id()}/export/{frmt}', headers=HEADERS)
+        data: bytes = api_get_bytes(f'pages/{page.get_id()}/export/{frmt}')
         if os.path.exists(path):
             info(f"Updating file with page \"{page.get_name()}.{FORMATS[frmt]}\"")
         else:
             info(f"Saving new file with page \"{page.get_name()}.{FORMATS[frmt]}\"")
         with open(path, 'wb') as f:
-            f.write(result.content)
+            f.write(data)
