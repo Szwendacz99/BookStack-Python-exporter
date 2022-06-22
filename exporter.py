@@ -2,11 +2,12 @@ import argparse
 import json
 import logging
 import os
-from logging import info, error
+from datetime import datetime
+from logging import info, error, debug
 from pathlib import Path
 from urllib.request import urlopen, Request
 
-logging.basicConfig(format='%(levelname)s :: %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(levelname)s :: %(message)s', level=logging.DEBUG)
 
 # (formatName, fileExtension)
 FORMATS: dict['str', 'str'] = {
@@ -33,21 +34,24 @@ parser.add_argument('-f', '--formats', type=str, default='md',
                     help=f'Coma separated list of formats to use for export.'
                          f' Available ones: {",".join([f for f in FORMATS.keys()])}')
 parser.add_argument('-l', '--level', type=str, default='pages',
-                    help=f'Coma separated list of levels at which should be export performed. Available levels: {LEVELS}')
+                    help=f'Coma separated list of levels at which should be export performed. '
+                         f'Available levels: {LEVELS}')
 args = parser.parse_args()
 
 formats = args.formats.split(',')
 for frmt in formats:
     if frmt not in FORMATS.keys():
-        raise Exception("Unknown format name (NOT file extension), "
-                        "check api docs for current version of your BookStack")
+        error("Unknown format name (NOT file extension), "
+              "check api docs for current version of your BookStack")
+        exit(1)
 
 API_PREFIX: str = f"{args.host.removesuffix(os.path.sep)}/api"
 FS_PATH: str = args.path.removesuffix(os.path.sep)
 LEVEL_CHOICE: list[str] = args.level.split(',')
 for lvl in LEVEL_CHOICE:
     if lvl not in LEVELS:
-        raise Exception(f"Level {lvl} is not supported, can be only one of {LEVELS}")
+        error(f"Level {lvl} is not supported, can be only one of {LEVELS}")
+        exit(1)
 
 with open(args.token_file, 'r') as f:
     TOKEN: str = f.readline().removesuffix('\n')
@@ -111,12 +115,26 @@ def api_get_dict(path: str) -> dict:
     return json.loads(api_get_bytes(path).decode())
 
 
+def check_if_update_needed(file: str, remote_last_edit: datetime) -> bool:
+    local_last_edit: datetime = datetime.fromtimestamp(os.path.getmtime(file))
+    debug(f"Local file creation timestamp: {local_last_edit.date()} {local_last_edit.time()}, "
+          f"remote edit timestamp:  {remote_last_edit.date()} {remote_last_edit.time()}")
+    return local_last_edit.timestamp() < remote_last_edit.timestamp()
+
+
 def export(files: list[Node], level: str):
     for file in files:
         make_dir(f"{FS_PATH}{os.path.sep}{file.get_path()}")
 
+        file_info: dict = api_get_dict(f'{level}/{file.get_id()}')
+        last_edit_time: datetime = datetime.strptime(file_info['updated_at'], '%Y-%m-%dT%H:%M:%S.%fZ')
+
         for frmt in formats:
             path: str = f"{FS_PATH}{os.path.sep}{file.get_path()}{os.path.sep}{file.get_name()}.{FORMATS[frmt]}"
+            debug(f"Checking for update for file {path}")
+            if not check_if_update_needed(path, last_edit_time):
+                debug("Already updated")
+                continue
 
             data: bytes = api_get_bytes(f'{level}/{file.get_id()}/export/{frmt}')
             with open(path, 'wb') as f:
@@ -154,6 +172,7 @@ for chapter_data in api_get_dict('chapters').get('data'):
     chapters[chapter.get_id()] = chapter
 
 info("Getting info about Pages")
+
 for page_data in api_get_dict('pages').get('data'):
     parent_id = page_data.get('chapter_id')
     if parent_id not in chapters.keys():
