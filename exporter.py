@@ -16,6 +16,12 @@ FORMATS: dict['str', 'str'] = {
     'html': 'html'
 }
 
+LEVELS = [
+    'pages',
+    'chapters',
+    'books'
+]
+
 parser = argparse.ArgumentParser(description='BookStack exporter')
 parser.add_argument('-p', '--path', type=str, default='.',
                     help='Path where exported files will be placed.')
@@ -26,6 +32,8 @@ parser.add_argument('-H', '--host', type=str, default='https://localhost',
 parser.add_argument('-f', '--formats', type=str, default='md',
                     help=f'Coma separated list of formats to use for export.'
                          f' Available ones: {",".join([f for f in FORMATS.keys()])}')
+parser.add_argument('-l', '--level', type=str, default='pages',
+                    help=f'Coma separated list of levels at which should be export performed. Available levels: {LEVELS}')
 args = parser.parse_args()
 
 formats = args.formats.split(',')
@@ -36,6 +44,10 @@ for frmt in formats:
 
 API_PREFIX: str = f"{args.host.removesuffix(os.path.sep)}/api"
 FS_PATH: str = args.path.removesuffix(os.path.sep)
+LEVEL_CHOICE: list[str] = args.level.split(',')
+for lvl in LEVEL_CHOICE:
+    if lvl not in LEVELS:
+        raise Exception(f"Level {lvl} is not supported, can be only one of {LEVELS}")
 
 with open(args.token_file, 'r') as f:
     TOKEN: str = f.readline().removesuffix('\n')
@@ -72,6 +84,7 @@ shelves: dict[int, Node] = {}
 books: dict[int, Node] = {}
 chapters: dict[int, Node] = {}
 pages: dict[int, Node] = {}
+pages_not_in_chapter: dict[int, Node] = {}
 
 
 def make_dir(path: str):
@@ -98,6 +111,19 @@ def api_get_dict(path: str) -> dict:
     return json.loads(api_get_bytes(path).decode())
 
 
+def export(files: list[Node], level: str):
+    for file in files:
+        make_dir(f"{FS_PATH}{os.path.sep}{file.get_path()}")
+
+        for frmt in formats:
+            path: str = f"{FS_PATH}{os.path.sep}{file.get_path()}{os.path.sep}{file.get_name()}.{FORMATS[frmt]}"
+
+            data: bytes = api_get_bytes(f'{level}/{file.get_id()}/export/{frmt}')
+            with open(path, 'wb') as f:
+                info(f"Saving {path}")
+                f.write(data)
+
+
 info("Getting info about Shelves and their Books")
 
 for shelf_data in api_get_dict('shelves').get('data'):
@@ -115,7 +141,7 @@ for shelf_data in api_get_dict('shelves').get('data'):
 info("Getting info about Books not belonging to any shelf")
 
 for book_data in api_get_dict('books').get('data'):
-    if book_data.get('id') != 0:
+    if book_data.get('id') in books.keys():
         continue
     book = Node(book_data.get('name'), None, book_data.get('id'))
     info(f"Book \"{book.get_name()} has no shelf assigned.\"")
@@ -136,21 +162,25 @@ for page_data in api_get_dict('pages').get('data'):
              f"using Book \"{books.get(parent_id).get_name()}\" as a parent.")
         page = Node(page_data.get('name'), books.get(parent_id), page_data.get('id'))
         pages[page.get_id()] = page
+        pages_not_in_chapter[page.get_id()] = page
         continue
 
     page = Node(page_data.get('name'), chapters.get(parent_id), page_data.get('id'))
     pages[page.get_id()] = page
 
-for page in pages.values():
-    make_dir(f"{FS_PATH}{os.path.sep}{page.get_path()}")
+files: list[Node] = []
+export_pages_not_in_chapter: bool = False
 
-    for frmt in formats:
-        path: str = f"{FS_PATH}{os.path.sep}{page.get_path()}{os.path.sep}{page.get_name()}.{FORMATS[frmt]}"
+for lvl in LEVEL_CHOICE:
+    if lvl == 'pages':
+        files = pages.values()
+    elif lvl == 'chapters':
+        files = chapters.values()
+        export_pages_not_in_chapter = True
+    elif lvl == 'books':
+        files = books.values()
+    export(files, lvl)
 
-        data: bytes = api_get_bytes(f'pages/{page.get_id()}/export/{frmt}')
-        if os.path.exists(path):
-            info(f"Updating file with page \"{page.get_name()}.{FORMATS[frmt]}\"")
-        else:
-            info(f"Saving new file with page \"{page.get_name()}.{FORMATS[frmt]}\"")
-        with open(path, 'wb') as f:
-            f.write(data)
+if export_pages_not_in_chapter:
+    info("Exporting pages that are not in chapter...")
+    export(pages_not_in_chapter.values(), 'pages')
