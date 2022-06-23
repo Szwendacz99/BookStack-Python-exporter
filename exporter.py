@@ -6,6 +6,7 @@ from datetime import datetime
 from logging import info, error, debug
 from pathlib import Path
 from urllib.request import urlopen, Request
+import urllib.parse
 
 # (formatName, fileExtension)
 FORMATS: dict['str', 'str'] = {
@@ -114,11 +115,18 @@ def make_dir(path: str):
     path_obj.mkdir(exist_ok=True, parents=True)
 
 
-def api_get_bytes(path: str) -> bytes:
-    request: Request = Request(f'{API_PREFIX}/{path}', headers=HEADERS)
+def api_get_bytes(path: str, **kwargs) -> bytes:
+    request_path: str = f'{API_PREFIX}/{path}'
+
+    if len(kwargs) > 0:
+        params: str = urllib.parse.urlencode(kwargs)
+        request_path += f"?{params}"
+
+    debug(f"Making http request: {request_path}")
+
+    request: Request = Request(request_path, headers=HEADERS)
 
     with urlopen(request) as response:
-        response = response
         if response.status == 403:
             error("403 Forbidden, check your token!")
             exit(response.status)
@@ -129,6 +137,28 @@ def api_get_bytes(path: str) -> bytes:
 def api_get_dict(path: str) -> dict:
     data = api_get_bytes(path).decode()
     return json.loads(data)
+
+
+def api_get_listing(path: str) -> list:
+    """
+    function for retrieving whole lists through api, it will
+    request for another 50 until have collected "total" amount
+    :param path:
+    :return:
+    """
+    count: int = 50
+    total: int = count
+
+    result: list = []
+
+    while total > len(result):
+        data: dict = json.loads(api_get_bytes(path, count=count, offset=len(result)))
+        total = data.get('total')
+        result += data.get('data')
+
+        debug(f"API listing got {total} items out of maximum {count}")
+
+    return result
 
 
 def check_if_update_needed(file: str, remote_last_edit: datetime) -> bool:
@@ -162,7 +192,7 @@ def export(files: list[Node], level: str):
 
 info("Getting info about Shelves and their Books")
 
-for shelf_data in api_get_dict('shelves').get('data'):
+for shelf_data in api_get_listing('shelves'):
     shelf = Node(shelf_data.get('name'), None, shelf_data.get('id'))
     debug(f"Shelf: \"{shelf.get_name()}\", ID: {shelf.get_id()}")
     shelves[shelf.get_id()] = shelf
@@ -178,7 +208,7 @@ for shelf_data in api_get_dict('shelves').get('data'):
 
 info("Getting info about Books not belonging to any shelf")
 
-for book_data in api_get_dict('books').get('data'):
+for book_data in api_get_listing('books'):
     if book_data.get('id') in books.keys():
         continue
     book = Node(book_data.get('name'), None, book_data.get('id'))
@@ -188,15 +218,16 @@ for book_data in api_get_dict('books').get('data'):
 
 info("Getting info about Chapters")
 
-for chapter_data in api_get_dict('chapters').get('data'):
+for chapter_data in api_get_listing('chapters'):
     chapter = Node(chapter_data.get('name'), books.get(chapter_data.get('book_id')), chapter_data.get('id'))
     debug(f"Chapter: \"{chapter.get_name()}\", ID: {chapter.get_id()}")
     chapters[chapter.get_id()] = chapter
 
 info("Getting info about Pages")
 
-for page_data in api_get_dict('pages').get('data'):
+for page_data in api_get_listing('pages'):
     parent_id = page_data.get('chapter_id')
+
     if parent_id not in chapters.keys():
         parent_id = page_data.get('book_id')
         info(f"Page \"{page_data.get('name')}\" is not in any chapter, "
@@ -222,6 +253,7 @@ for lvl in LEVEL_CHOICE:
         export_pages_not_in_chapter = True
     elif lvl == 'books':
         files = books.values()
+
     export(files, lvl)
 
 if export_pages_not_in_chapter:
