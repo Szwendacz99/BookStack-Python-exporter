@@ -127,7 +127,8 @@ def api_get_bytes(path: str) -> bytes:
 
 
 def api_get_dict(path: str) -> dict:
-    return json.loads(api_get_bytes(path).decode())
+    data = api_get_bytes(path).decode()
+    return json.loads(data)
 
 
 def check_if_update_needed(file: str, remote_last_edit: datetime) -> bool:
@@ -163,6 +164,7 @@ info("Getting info about Shelves and their Books")
 
 for shelf_data in api_get_dict('shelves').get('data'):
     shelf = Node(shelf_data.get('name'), None, shelf_data.get('id'))
+    debug(f"Shelf: \"{shelf.get_name()}\", ID: {shelf.get_id()}")
     shelves[shelf.get_id()] = shelf
 
     shelf_details = api_get_dict(f'shelves/{shelf.get_id()}')
@@ -171,6 +173,7 @@ for shelf_data in api_get_dict('shelves').get('data'):
         continue
     for book_data in shelf_details.get('books'):
         book = Node(book_data.get('name'), shelf, book_data.get('id'))
+        debug(f"Book: \"{book.get_name()}\", ID: {book.get_id()}")
         books[book.get_id()] = book
 
 info("Getting info about Books not belonging to any shelf")
@@ -179,6 +182,7 @@ for book_data in api_get_dict('books').get('data'):
     if book_data.get('id') in books.keys():
         continue
     book = Node(book_data.get('name'), None, book_data.get('id'))
+    debug(f"Book: \"{book.get_name()}\", ID: {book.get_id()}")
     info(f"Book \"{book.get_name()} has no shelf assigned.\"")
     books[book.get_id()] = book
 
@@ -186,6 +190,7 @@ info("Getting info about Chapters")
 
 for chapter_data in api_get_dict('chapters').get('data'):
     chapter = Node(chapter_data.get('name'), books.get(chapter_data.get('book_id')), chapter_data.get('id'))
+    debug(f"Chapter: \"{chapter.get_name()}\", ID: {chapter.get_id()}")
     chapters[chapter.get_id()] = chapter
 
 info("Getting info about Pages")
@@ -197,11 +202,13 @@ for page_data in api_get_dict('pages').get('data'):
         info(f"Page \"{page_data.get('name')}\" is not in any chapter, "
              f"using Book \"{books.get(parent_id).get_name()}\" as a parent.")
         page = Node(page_data.get('name'), books.get(parent_id), page_data.get('id'))
+        debug(f"Page: \"{page.get_name()}\", ID: {page.get_id()}")
         pages[page.get_id()] = page
         pages_not_in_chapter[page.get_id()] = page
         continue
 
     page = Node(page_data.get('name'), chapters.get(parent_id), page_data.get('id'))
+    debug(f"Page: \"{page.get_name()}\", ID: {page.get_id()}")
     pages[page.get_id()] = page
 
 files: list[Node] = []
