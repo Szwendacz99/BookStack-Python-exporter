@@ -7,8 +7,6 @@ from logging import info, error, debug
 from pathlib import Path
 from urllib.request import urlopen, Request
 
-logging.basicConfig(format='%(levelname)s :: %(message)s', level=logging.DEBUG)
-
 # (formatName, fileExtension)
 FORMATS: dict['str', 'str'] = {
     'markdown': 'md',
@@ -23,6 +21,13 @@ LEVELS = [
     'books'
 ]
 
+LOG_LEVEL: dict = {
+    'debug': logging.DEBUG,
+    'info': logging.INFO,
+    'warning': logging.WARNING,
+    'error': logging.ERROR
+}
+
 parser = argparse.ArgumentParser(description='BookStack exporter')
 parser.add_argument('-p', '--path', type=str, default='.',
                     help='Path where exported files will be placed.')
@@ -30,13 +35,23 @@ parser.add_argument('-t', '--token-file', type=str, default=f'.{os.path.sep}toke
                     help='File containing authorization token in format TOKEN_ID:TOKEN_SECRET')
 parser.add_argument('-H', '--host', type=str, default='https://localhost',
                     help='Your domain with protocol prefix, example: https://example.com')
-parser.add_argument('-f', '--formats', type=str, default='md',
+parser.add_argument('-f', '--formats', type=str, default='markdown',
                     help=f'Coma separated list of formats to use for export.'
                          f' Available ones: {",".join([f for f in FORMATS.keys()])}')
 parser.add_argument('-l', '--level', type=str, default='pages',
                     help=f'Coma separated list of levels at which should be export performed. '
                          f'Available levels: {LEVELS}')
+parser.add_argument('-V', '--log-level', type=str, default='info',
+                    help=f'Set verbosity level. '
+                         f'Available levels: {LOG_LEVEL.keys()}')
+
 args = parser.parse_args()
+
+if args.log_level not in LOG_LEVEL.keys():
+    error(f"Bad log level {args.log_level}, available levels: {LOG_LEVEL.keys()}")
+    exit(1)
+
+logging.basicConfig(format='%(levelname)s :: %(message)s', level=LOG_LEVEL.get(args.log_level))
 
 formats = args.formats.split(',')
 for frmt in formats:
@@ -116,6 +131,8 @@ def api_get_dict(path: str) -> dict:
 
 
 def check_if_update_needed(file: str, remote_last_edit: datetime) -> bool:
+    if not os.path.exists(file):
+        return True
     local_last_edit: datetime = datetime.fromtimestamp(os.path.getmtime(file))
     debug(f"Local file creation timestamp: {local_last_edit.date()} {local_last_edit.time()}, "
           f"remote edit timestamp:  {remote_last_edit.date()} {remote_last_edit.time()}")

@@ -21,11 +21,13 @@ python exporter.py \
     -f pdf,md,plaintext,html \
     -l pages,chapters,books
     -t ./token.txt \
+    -V debug \
     -p ./ 
 ```
 
 Customization:
 ```text
+options:
   -p PATH, --path PATH  Path where exported files will be placed.
                         Default: .
   -t TOKEN_FILE, --token-file TOKEN_FILE
@@ -34,17 +36,22 @@ Customization:
   -H HOST, --host HOST  Your domain with protocol prefix, example: https://example.com
                         Default: https://localhost
   -f FORMATS, --formats FORMATS
-                        Coma separated list of formats to use for export. Available ones: md,plaintext,pdf,html
-                        Default: md
+                        Coma separated list of formats to use for export. 
+                        Available ones: markdown,plaintext,pdf,html
+                        default: markdown
   -l LEVEL, --level LEVEL
                         Coma separated list of levels at which should be export performed. 
                         Available levels: ['pages', 'chapters', 'books']
                         Default: pages
+  -V LOG_LEVEL, --log-level LOG_LEVEL
+                        Set verbosity level. 
+                        Available levels: dict_keys(['debug', 'info', 'warning', 'error'])
+                        Default: info
 
 ```
 
 ### TODO:
-- choosing verbosity level through command line parameter
+- ~~choosing verbosity level through command line parameter~~ Done
 - ~~choosing on what level should the notes be exported (Books, Chapters, Pages)~~ Done
-- (optional) choosing if update note file only if the last edit timestamp from API is later that the local file timestamp
+- WIP: choosing if update note file only if the last edit timestamp from API is later that the local file timestamp 
 - suggestions?
