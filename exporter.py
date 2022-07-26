@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from logging import info, error, debug
 from pathlib import Path
+from typing import Union
 from urllib.request import urlopen, Request
 import urllib.parse
 
@@ -37,14 +38,11 @@ parser.add_argument('-t', '--token-file', type=str, default=f'.{os.path.sep}toke
 parser.add_argument('-H', '--host', type=str, default='https://localhost',
                     help='Your domain with protocol prefix, example: https://example.com')
 parser.add_argument('-f', '--formats', type=str, default='markdown',
-                    help=f'Coma separated list of formats to use for export.'
-                         f' Available ones: {",".join([f for f in FORMATS.keys()])}')
+                    help=f'Coma separated list of formats to use for export.', choices=FORMATS.keys())
 parser.add_argument('-l', '--level', type=str, default='pages',
-                    help=f'Coma separated list of levels at which should be export performed. '
-                         f'Available levels: {LEVELS}')
+                    help=f'Coma separated list of levels at which should be export performed. ', choices=LEVELS)
 parser.add_argument('-V', '--log-level', type=str, default='info',
-                    help=f'Set verbosity level. '
-                         f'Available levels: {LOG_LEVEL.keys()}')
+                    help=f'Set verbosity level. ', choices=LOG_LEVEL.keys())
 
 args = parser.parse_args()
 
@@ -77,19 +75,49 @@ HEADERS = {'Content-Type': 'application/json; charset=utf-8',
 
 
 class Node:
-    def __init__(self, name: str, parent: ['Node', None], node_id: int):
+    def __init__(self, name: str,
+                 parent: Union['Node', None],
+                 node_id: int,
+                 last_edit_timestamp: datetime):
         self.__name: str = name
-        self.__parent: ['Node', None] = parent
+        self.__children: list['Node'] = []
+
+        self.__parent: Union['Node', None] = parent
+        if parent is not None:
+            parent.add_child(self)
+
+        self.__last_edit_timestamp: datetime = last_edit_timestamp
         self.__node_id = node_id
 
     def get_name(self) -> str:
         return self.__name
 
-    def get_parent(self) -> ['Node', None]:
+    def get_parent(self) -> Union['Node', None]:
         return self.__parent
+
+    def changed_since(self, timestamp: datetime) -> int:
+        """
+        Check if remote version have changed after given timestamp, including its children
+        :param timestamp:
+        :return: amount of changed documents at level of this document Node
+        """
+        result: int = 0
+        if self.__last_edit_timestamp > timestamp:
+            result += 1
+        for child in self.__children:
+            result += child.changed_since(timestamp)
+
+        return result
+
+    def get_last_edit_timestamp(self) -> datetime:
+        return self.__last_edit_timestamp
 
     def set_parent(self, parent: 'Node'):
         self.__parent = parent
+        parent.add_child(self)
+
+    def add_child(self, child: 'Node'):
+        self.__children.append(child)
 
     def get_path(self) -> str:
         if self.__parent is None:
@@ -105,6 +133,10 @@ books: dict[int, Node] = {}
 chapters: dict[int, Node] = {}
 pages: dict[int, Node] = {}
 pages_not_in_chapter: dict[int, Node] = {}
+
+
+def api_timestamp_string_to_datetime(timestamp: str) -> datetime:
+    return datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%fZ')
 
 
 def make_dir(path: str):
@@ -161,30 +193,37 @@ def api_get_listing(path: str) -> list:
     return result
 
 
-def check_if_update_needed(file: str, remote_last_edit: datetime) -> bool:
-    if not os.path.exists(file):
+def check_if_update_needed(file_path: str, document: Node) -> bool:
+    if not os.path.exists(file_path):
+        debug(f"Document {file_path} is missing on disk, update needed.")
         return True
-    local_last_edit: datetime = datetime.fromtimestamp(os.path.getmtime(file))
+    local_last_edit: datetime = datetime.utcfromtimestamp(os.path.getmtime(file_path))
+    remote_last_edit: datetime = document.get_last_edit_timestamp()
+
     debug(f"Local file creation timestamp: {local_last_edit.date()} {local_last_edit.time()}, "
           f"remote edit timestamp:  {remote_last_edit.date()} {remote_last_edit.time()}")
-    return local_last_edit.timestamp() < remote_last_edit.timestamp()
+    changes: int = document.changed_since(local_last_edit)
+
+    if changes > 0:
+        info(f"Document \"{document.get_name()}\" consists of {changes} outdated documents, update needed.")
+        return True
+
+    debug(f"Document \"{document.get_name()}\" consists of {changes} outdated documents.")
+    return False
 
 
-def export(files: list[Node], level: str):
-    for file in files:
-        make_dir(f"{FS_PATH}{os.path.sep}{file.get_path()}")
-
-        file_info: dict = api_get_dict(f'{level}/{file.get_id()}')
-        last_edit_time: datetime = datetime.strptime(file_info['updated_at'], '%Y-%m-%dT%H:%M:%S.%fZ')
+def export(documents: list[Node], level: str):
+    for document in documents:
+        make_dir(f"{FS_PATH}{os.path.sep}{document.get_path()}")
 
         for frmt in formats:
-            path: str = f"{FS_PATH}{os.path.sep}{file.get_path()}{os.path.sep}{file.get_name()}.{FORMATS[frmt]}"
+            path: str = f"{FS_PATH}{os.path.sep}{document.get_path()}{os.path.sep}{document.get_name()}.{FORMATS[frmt]}"
             debug(f"Checking for update for file {path}")
-            if not check_if_update_needed(path, last_edit_time):
+            if not check_if_update_needed(path, document):
                 debug("Already updated")
                 continue
 
-            data: bytes = api_get_bytes(f'{level}/{file.get_id()}/export/{frmt}')
+            data: bytes = api_get_bytes(f'{level}/{document.get_id()}/export/{frmt}')
             with open(path, 'wb') as f:
                 info(f"Saving {path}")
                 f.write(data)
@@ -193,7 +232,10 @@ def export(files: list[Node], level: str):
 info("Getting info about Shelves and their Books")
 
 for shelf_data in api_get_listing('shelves'):
-    shelf = Node(shelf_data.get('name'), None, shelf_data.get('id'))
+
+    last_edit_timestamp: datetime = api_timestamp_string_to_datetime(shelf_data['updated_at'])
+    shelf = Node(shelf_data.get('name'), None, shelf_data.get('id'), last_edit_timestamp)
+
     debug(f"Shelf: \"{shelf.get_name()}\", ID: {shelf.get_id()}")
     shelves[shelf.get_id()] = shelf
 
@@ -202,7 +244,9 @@ for shelf_data in api_get_listing('shelves'):
     if shelf_details.get('books') is None:
         continue
     for book_data in shelf_details.get('books'):
-        book = Node(book_data.get('name'), shelf, book_data.get('id'))
+
+        last_edit_timestamp: datetime = api_timestamp_string_to_datetime(book_data['updated_at'])
+        book = Node(book_data.get('name'), shelf, book_data.get('id'), last_edit_timestamp)
         debug(f"Book: \"{book.get_name()}\", ID: {book.get_id()}")
         books[book.get_id()] = book
 
@@ -211,16 +255,23 @@ info("Getting info about Books not belonging to any shelf")
 for book_data in api_get_listing('books'):
     if book_data.get('id') in books.keys():
         continue
-    book = Node(book_data.get('name'), None, book_data.get('id'))
-    debug(f"Book: \"{book.get_name()}\", ID: {book.get_id()}")
+
+    last_edit_timestamp: datetime = api_timestamp_string_to_datetime(book_data['updated_at'])
+    book = Node(book_data.get('name'), None, book_data.get('id'), last_edit_timestamp)
+
+    debug(f"Book: \"{book.get_name()}\", ID: {book.get_id()}, last edit: {book.get_last_edit_timestamp()}")
     info(f"Book \"{book.get_name()} has no shelf assigned.\"")
     books[book.get_id()] = book
 
 info("Getting info about Chapters")
 
 for chapter_data in api_get_listing('chapters'):
-    chapter = Node(chapter_data.get('name'), books.get(chapter_data.get('book_id')), chapter_data.get('id'))
-    debug(f"Chapter: \"{chapter.get_name()}\", ID: {chapter.get_id()}")
+    last_edit_timestamp: datetime = api_timestamp_string_to_datetime(chapter_data['updated_at'])
+    chapter = Node(chapter_data.get('name'),
+                   books.get(chapter_data.get('book_id')),
+                   chapter_data.get('id'),
+                   last_edit_timestamp)
+    debug(f"Chapter: \"{chapter.get_name()}\", ID: {chapter.get_id()}, last edit: {chapter.get_last_edit_timestamp()}")
     chapters[chapter.get_id()] = chapter
 
 info("Getting info about Pages")
@@ -228,18 +279,22 @@ info("Getting info about Pages")
 for page_data in api_get_listing('pages'):
     parent_id = page_data.get('chapter_id')
 
+    last_edit_timestamp: datetime = api_timestamp_string_to_datetime(page_data['updated_at'])
+
     if parent_id not in chapters.keys():
-        parent_id = page_data.get('book_id')
-        info(f"Page \"{page_data.get('name')}\" is not in any chapter, "
-             f"using Book \"{books.get(parent_id).get_name()}\" as a parent.")
-        page = Node(page_data.get('name'), books.get(parent_id), page_data.get('id'))
-        debug(f"Page: \"{page.get_name()}\", ID: {page.get_id()}")
+        parent = books.get(page_data.get('book_id'))
+        page = Node(page_data.get('name'), parent, page_data.get('id'), last_edit_timestamp)
+
+        info(f"Page \"{page.get_name()}\" is not in any chapter, "
+             f"using Book \"{parent.get_name()}\" as a parent.")
+
+        debug(f"Page: \"{page.get_name()}\", ID: {page.get_id()}, last edit: {page.get_last_edit_timestamp()}")
         pages[page.get_id()] = page
         pages_not_in_chapter[page.get_id()] = page
         continue
 
-    page = Node(page_data.get('name'), chapters.get(parent_id), page_data.get('id'))
-    debug(f"Page: \"{page.get_name()}\", ID: {page.get_id()}")
+    page = Node(page_data.get('name'), chapters.get(parent_id), page_data.get('id'), last_edit_timestamp)
+    debug(f"Page: \"{page.get_name()}\", ID: {page.get_id()}, last edit: {page.get_last_edit_timestamp()}")
     pages[page.get_id()] = page
 
 files: list[Node] = []
