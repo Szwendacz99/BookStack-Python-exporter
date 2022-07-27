@@ -19,7 +19,7 @@ Full example on how to use the script:
 ```bash
 python exporter.py \
     -H https://wiki.example.com \
-    -f pdf md plaintext html \
+    -f pdf markdown plaintext html \
     -l pages chapters books \
     --force-update-files \
     -t ./token.txt \
