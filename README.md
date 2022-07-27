@@ -5,6 +5,7 @@ Customizable script for exporting notes from BookStack through API
 - export keeping the tree structure by making folders from Shelves, Books and Chapters
 - export multiple formats at once
 - export at multiple levels at once (export Books or/and Chapters or/and Pages as files)
+- choose if local files should be updated only if their edit timestamp is older than remote document last edit, or timestamps should be ignored and files will always be overwritten with the newest version
 - customizable path for placing exported notes
 - authorization token is loaded from txt file
 
@@ -46,7 +47,7 @@ options:
 ```
 
 ### TODO:
-- ~~choosing verbosity level through command line parameter~~ Done
-- ~~choosing on what level should the notes be exported (Books, Chapters, Pages)~~ Done
-- WIP: choosing if update note file only if the last edit timestamp from API is later that the local file timestamp 
-- suggestions?
+- [x] ~~choosing verbosity level through command line parameter~~ Done
+- [x] ~~choosing on what level should the notes be exported (Books, Chapters, Pages)~~ Done
+- [x] ~~choosing if update note file only if the last edit timestamp from API is later that the local file timestamp~~ Done
+- [ ] suggestions?
