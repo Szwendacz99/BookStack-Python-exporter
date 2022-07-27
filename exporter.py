@@ -37,22 +37,23 @@ parser.add_argument('-t', '--token-file', type=str, default=f'.{os.path.sep}toke
                     help='File containing authorization token in format TOKEN_ID:TOKEN_SECRET')
 parser.add_argument('-H', '--host', type=str, default='https://localhost',
                     help='Your domain with protocol prefix, example: https://example.com')
-parser.add_argument('-f', '--formats', type=str, default='markdown',
-                    help=f'Coma separated list of formats to use for export.', choices=FORMATS.keys())
-parser.add_argument('-l', '--level', type=str, default='pages',
-                    help=f'Coma separated list of levels at which should be export performed. ', choices=LEVELS)
+parser.add_argument('-f', '--formats', type=str, default=['markdown'], nargs="+",
+                    help=f'Space separated list of formats to use for export.', choices=FORMATS.keys())
+parser.add_argument('-l', '--level', type=str, default=['pages'], nargs="+",
+                    help=f'Space separated list of levels at which should be export performed. ', choices=LEVELS)
+parser.add_argument('--force-update-files', action='store_true',
+                    help="Set this option to skip checking local files timestamps against remote last edit timestamps."
+                         "This will cause overwriting local files, even if they seem to be already in newest version.")
+parser.set_defaults(force_update_files=False)
 parser.add_argument('-V', '--log-level', type=str, default='info',
                     help=f'Set verbosity level. ', choices=LOG_LEVEL.keys())
 
 args = parser.parse_args()
 
-if args.log_level not in LOG_LEVEL.keys():
-    error(f"Bad log level {args.log_level}, available levels: {LOG_LEVEL.keys()}")
-    exit(1)
-
 logging.basicConfig(format='%(levelname)s :: %(message)s', level=LOG_LEVEL.get(args.log_level))
 
-formats = args.formats.split(',')
+formats: list[str] = args.formats
+
 for frmt in formats:
     if frmt not in FORMATS.keys():
         error("Unknown format name (NOT file extension), "
@@ -61,7 +62,7 @@ for frmt in formats:
 
 API_PREFIX: str = f"{args.host.removesuffix(os.path.sep)}/api"
 FS_PATH: str = args.path.removesuffix(os.path.sep)
-LEVEL_CHOICE: list[str] = args.level.split(',')
+LEVEL_CHOICE: list[str] = args.level
 for lvl in LEVEL_CHOICE:
     if lvl not in LEVELS:
         error(f"Level {lvl} is not supported, can be only one of {LEVELS}")
@@ -72,6 +73,7 @@ with open(args.token_file, 'r') as f:
 
 HEADERS = {'Content-Type': 'application/json; charset=utf-8',
            'Authorization': f"Token {TOKEN}"}
+SKIP_TIMESTAMPS: bool = args.force_update_files
 
 
 class Node:
@@ -194,6 +196,10 @@ def api_get_listing(path: str) -> list:
 
 
 def check_if_update_needed(file_path: str, document: Node) -> bool:
+    if SKIP_TIMESTAMPS:
+        return True
+    debug(f"Checking for update for file {file_path}")
+
     if not os.path.exists(file_path):
         debug(f"Document {file_path} is missing on disk, update needed.")
         return True
@@ -205,10 +211,10 @@ def check_if_update_needed(file_path: str, document: Node) -> bool:
     changes: int = document.changed_since(local_last_edit)
 
     if changes > 0:
-        info(f"Document \"{document.get_name()}\" consists of {changes} outdated documents, update needed.")
+        info(f"Document \"{file_path}\" consists of {changes} outdated documents, update needed.")
         return True
 
-    debug(f"Document \"{document.get_name()}\" consists of {changes} outdated documents.")
+    debug(f"Document \"{file_path}\" consists of {changes} outdated documents, skipping updating.")
     return False
 
 
@@ -218,9 +224,8 @@ def export(documents: list[Node], level: str):
 
         for frmt in formats:
             path: str = f"{FS_PATH}{os.path.sep}{document.get_path()}{os.path.sep}{document.get_name()}.{FORMATS[frmt]}"
-            debug(f"Checking for update for file {path}")
+
             if not check_if_update_needed(path, document):
-                debug("Already updated")
                 continue
 
             data: bytes = api_get_bytes(f'{level}/{document.get_id()}/export/{frmt}')

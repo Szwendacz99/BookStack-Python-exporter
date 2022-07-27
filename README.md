@@ -18,8 +18,9 @@ Full example on how to use the script:
 ```bash
 python exporter.py \
     -H https://wiki.example.com \
-    -f pdf,md,plaintext,html \
-    -l pages,chapters,books
+    -f pdf md plaintext html \
+    -l pages chapters books \
+    --force-update-files \
     -t ./token.txt \
     -V debug \
     -p ./ 
@@ -29,25 +30,19 @@ Customization:
 ```text
 options:
   -p PATH, --path PATH  Path where exported files will be placed.
-                        Default: .
   -t TOKEN_FILE, --token-file TOKEN_FILE
                         File containing authorization token in format TOKEN_ID:TOKEN_SECRET
-                        Default: ./token.txt
   -H HOST, --host HOST  Your domain with protocol prefix, example: https://example.com
-                        Default: https://localhost
-  -f FORMATS, --formats FORMATS
-                        Coma separated list of formats to use for export. 
-                        Available ones: markdown,plaintext,pdf,html
-                        default: markdown
-  -l LEVEL, --level LEVEL
-                        Coma separated list of levels at which should be export performed. 
-                        Available levels: ['pages', 'chapters', 'books']
-                        Default: pages
-  -V LOG_LEVEL, --log-level LOG_LEVEL
-                        Set verbosity level. 
-                        Available levels: dict_keys(['debug', 'info', 'warning', 'error'])
-                        Default: info
-
+  -f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...], 
+                       --formats {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]
+                        Space separated list of formats to use for export.
+  -l {pages,chapters,books} [{pages,chapters,books} ...], --level {pages,chapters,books} [{pages,chapters,books} ...]
+                        Space separated list of levels at which should be export performed.
+  --force-update-files  Set this option to skip checking local files timestamps against remote last edit
+                        timestamps.This will cause overwriting local files, even if they seem to be already in
+                        newest version.
+  -V {debug,info,warning,error}, --log-level {debug,info,warning,error}
+                        Set verbosity level.
 ```
 
 ### TODO:
