@@ -7,6 +7,7 @@ Customizable script for exporting notes from BookStack through API
 - export at multiple levels at once (export Books or/and Chapters or/and Pages as files)
 - choose if local files should be updated only if their edit timestamp is older than remote document last edit, or timestamps should be ignored and files will always be overwritten with the newest version
 - customizable path for placing exported notes
+- configure replacing any characters in filenames with "_" for any filesystem compatibility
 - authorization token is loaded from txt file
 
 Requirements:
@@ -21,6 +22,7 @@ python exporter.py \
     -H https://wiki.example.com \
     -f pdf markdown plaintext html \
     -l pages chapters books \
+    -c "/" "#" \
     --force-update-files \
     -t ./token.txt \
     -V debug \
@@ -37,6 +39,8 @@ options:
   -f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...], 
                        --formats {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]
                         Space separated list of formats to use for export.
+  -c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...], --forbidden-chars FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]
+                        Space separated list of symbols to be replaced with "_" in filenames.
   -l {pages,chapters,books} [{pages,chapters,books} ...], --level {pages,chapters,books} [{pages,chapters,books} ...]
                         Space separated list of levels at which should be export performed.
   --force-update-files  Set this option to skip checking local files timestamps against remote last edit
