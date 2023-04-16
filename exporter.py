@@ -6,12 +6,12 @@ from datetime import datetime
 from logging import info, error, debug
 from pathlib import Path
 import sys
-from typing import Union
+from typing import Dict, List, Union
 from urllib.request import urlopen, Request
 import urllib.parse
 
 # (formatName, fileExtension)
-FORMATS: dict['str', 'str'] = {
+FORMATS: Dict['str', 'str'] = {
     'markdown': 'md',
     'plaintext': 'txt',
     'pdf': 'pdf',
@@ -20,7 +20,7 @@ FORMATS: dict['str', 'str'] = {
 
 LEVELS = ['pages', 'chapters', 'books']
 
-LOG_LEVEL: dict = {
+LOG_LEVEL: Dict = {
     'debug': logging.DEBUG,
     'info': logging.INFO,
     'warning': logging.WARNING,
@@ -28,7 +28,7 @@ LOG_LEVEL: dict = {
 }
 
 # Characters in filenames to be replaced with "_"
-FORBIDDEN_CHARS: list[str] = ["/", "#"]
+FORBIDDEN_CHARS: List[str] = ["/", "#"]
 
 parser = argparse.ArgumentParser(description='BookStack exporter')
 parser.add_argument('-p',
@@ -62,6 +62,23 @@ parser.add_argument('-c',
                     nargs="+",
                     help='Space separated list of symbols to be replaced '
                     'with "_" in filenames.')
+parser.add_argument('-u',
+                    '--user-agent',
+                    type=str,
+                    default="BookStack exporter",
+                    help='User agent header content. In situations'
+                    ' where requests are blocked because of bad client/'
+                    'unrecognized web browser/etc (like with CloudFlare'
+                    ' tunnels), change to some typical '
+                    'web browser user agent header.')
+parser.add_argument('--additional-headers',
+                    type=str,
+                    nargs="+",
+                    default=[],
+                    help='List of arbitrary additional HTTP headers to be '
+                    'sent with every HTTP request. They can override default'
+                    ' ones, including Authorization header. '
+                    'Example: -u "Header1: value1" "Header2": value2')
 parser.add_argument(
     '-l',
     '--level',
@@ -87,10 +104,18 @@ parser.add_argument('-V',
 
 args = parser.parse_args()
 
+
+def removesuffix(text, suffix):
+    """Remove suffix from text if matched."""
+    if text.endswith(suffix):
+        return text[:len(text) - len(suffix)]
+    return text
+
+
 logging.basicConfig(format='%(levelname)s :: %(message)s',
                     level=LOG_LEVEL.get(args.log_level))
 
-formats: list[str] = args.formats
+formats: List[str] = args.formats
 FORBIDDEN_CHARS = args.forbidden_chars
 
 for frmt in formats:
@@ -99,21 +124,28 @@ for frmt in formats:
               "check api docs for current version of your BookStack")
         sys.exit(1)
 
-API_PREFIX: str = f"{args.host.removesuffix(os.path.sep)}/api"
-FS_PATH: str = args.path.removesuffix(os.path.sep)
-LEVEL_CHOICE: list[str] = args.level
+API_PREFIX: str = f"{removesuffix(args.host, os.path.sep)}/api"
+FS_PATH: str = removesuffix(args.path, os.path.sep)
+LEVEL_CHOICE: List[str] = args.level
 for lvl in LEVEL_CHOICE:
     if lvl not in LEVELS:
         error(f"Level {lvl} is not supported, can be only one of {LEVELS}")
         sys.exit(1)
 
 with open(args.token_file, 'r', encoding='utf-8') as f:
-    TOKEN: str = f.readline().removesuffix('\n')
+    TOKEN: str = removesuffix(f.readline(), '\n')
 
 HEADERS = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Authorization': f"Token {TOKEN}"
+    'Authorization': f"Token {TOKEN}",
+    'User-Agent': args.user_agent
 }
+for header in args.additional_headers:
+    values = header.split(':', 1)
+    if len(values) < 2:
+        raise ValueError(f"Improper HTTP header specification: {header}")
+    HEADERS[values[0]] = values[1]
+
 SKIP_TIMESTAMPS: bool = args.force_update_files
 
 
@@ -125,7 +157,7 @@ class Node:
         for char in FORBIDDEN_CHARS:
             name = name.replace(char, "_")
         self.__name: str = name
-        self.__children: list['Node'] = []
+        self.__children: List['Node'] = []
 
         self.__parent: Union['Node', None] = parent
         if parent is not None:
@@ -136,15 +168,18 @@ class Node:
 
     @property
     def name(self) -> str:
+        """Return name of this Shelf/Book/Chapter/Page."""
         return self.__name
 
     @property
     def parent(self) -> Union['Node', None]:
+        """Return parent Node or None if there isn't any."""
         return self.__parent
 
     def changed_since(self, timestamp: datetime) -> int:
         """
-        Check if remote version have changed after given timestamp, including its children
+        Check if remote version have changed after given timestamp,
+        including its children
         :param timestamp:
         :return: amount of changed documents at level of this document Node
         """
@@ -175,11 +210,11 @@ class Node:
         return self.__node_id
 
 
-shelves: dict[int, Node] = {}
-books: dict[int, Node] = {}
-chapters: dict[int, Node] = {}
-pages: dict[int, Node] = {}
-pages_not_in_chapter: dict[int, Node] = {}
+shelves: Dict[int, Node] = {}
+books: Dict[int, Node] = {}
+chapters: Dict[int, Node] = {}
+pages: Dict[int, Node] = {}
+pages_not_in_chapter: Dict[int, Node] = {}
 
 
 def api_timestamp_string_to_datetime(timestamp: str) -> datetime:
@@ -271,7 +306,7 @@ def check_if_update_needed(file_path: str, document: Node) -> bool:
     return False
 
 
-def export(documents: list[Node], level: str):
+def export(documents: List[Node], level: str):
     """Save Node to file."""
     for document in documents:
         make_dir(f"{FS_PATH}{os.path.sep}{document.get_path()}")
@@ -370,7 +405,7 @@ for page_data in api_get_listing('pages'):
           f"last edit: {page.get_last_edit_timestamp()}")
     pages[page.get_id()] = page
 
-files: list[Node] = []
+files: List[Node] = []
 EXPORT_PAGES_NOT_IN_CHAPTER: bool = False
 
 for lvl in LEVEL_CHOICE:

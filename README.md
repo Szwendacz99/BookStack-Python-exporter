@@ -9,6 +9,8 @@ Customizable script for exporting notes from BookStack through API
 - customizable path for placing exported notes
 - configure replacing any characters in filenames with "_" for any filesystem compatibility
 - authorization token is loaded from txt file
+- Set custom HTTP User-Agent header to bypass filtering based on that header (like in CloudFlare tunnels)
+- Set arbitrary custom headers through parameter
 
 Requirements:
 - Python at least in version 3.6
@@ -26,26 +28,38 @@ python exporter.py \
     --force-update-files \
     -t ./token.txt \
     -V debug \
-    -p ./ 
+    -p ./ \
+    --user-agent "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/112.0"
+    --additional-headers "Header1: value1" "Header2: value2"  
 ```
 
 Customization:
 ```text
 options:
+  -h, --help            show this help message and exit
   -p PATH, --path PATH  Path where exported files will be placed.
   -t TOKEN_FILE, --token-file TOKEN_FILE
                         File containing authorization token in format TOKEN_ID:TOKEN_SECRET
   -H HOST, --host HOST  Your domain with protocol prefix, example: https://example.com
   -f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...], 
-                       --formats {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]
+                --formats {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]
                         Space separated list of formats to use for export.
   -c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...], --forbidden-chars FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]
                         Space separated list of symbols to be replaced with "_" in filenames.
-  -l {pages,chapters,books} [{pages,chapters,books} ...], --level {pages,chapters,books} [{pages,chapters,books} ...]
+  -u USER_AGENT, --user-agent USER_AGENT
+                        User agent header content. In situations where requests are blocked  
+                        because of bad client/unrecognized web browser/etc (like with CloudFlare tunnels),  
+                        change to some typical web browser user agent header.
+  --additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]
+                        List of arbitrary additional HTTP headers to be sent with every HTTP request.  
+                        They can override default ones, including Authorization header.  
+                        Example: -u "Header1: value1" "Header2": value2
+  -l {pages,chapters,books} [{pages,chapters,books} ...], 
+                --level {pages,chapters,books} [{pages,chapters,books} ...]
                         Space separated list of levels at which should be export performed.
-  --force-update-files  Set this option to skip checking local files timestamps against remote last edit
-                        timestamps.This will cause overwriting local files, even if they seem to be already in
-                        newest version.
+  --force-update-files  Set this option to skip checking local files timestamps against  
+                        remote last edit timestamps. This will cause overwriting local files,  
+                        even if they seem to be already in newest version.
   -V {debug,info,warning,error}, --log-level {debug,info,warning,error}
                         Set verbosity level.
 ```
