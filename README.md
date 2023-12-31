@@ -2,7 +2,7 @@
 Customizable script for exporting notes from BookStack through API
 
 #### Features:
-- export keeping the tree structure by making folders from Shelves, Books and Chapters
+- export keeping the tree structure by making folders from Shelves, Books, Chapters and attachments (including attachments from external links)
 - export multiple formats at once
 - export at multiple levels at once (export Books or/and Chapters or/and Pages as files)
 - choose if local files should be updated only if their edit timestamp is older than remote document last edit, or timestamps should be ignored and files will always be overwritten with the newest version
@@ -35,31 +35,47 @@ python exporter.py \
 
 Customization:
 ```text
+usage: exporter.py [-h] [-p PATH] [-t TOKEN_FILE] [-H HOST]
+                   [-f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]]
+                   [-c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]] [-u USER_AGENT]
+                   [--additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]]
+                   [-l {pages,chapters,books} [{pages,chapters,books} ...]]
+                   [--force-update-files] [--dont-export-attachments]
+                   [--dont-export-external-attachments] [-V {debug,info,warning,error}]
+
+BookStack exporter
+
 options:
   -h, --help            show this help message and exit
   -p PATH, --path PATH  Path where exported files will be placed.
   -t TOKEN_FILE, --token-file TOKEN_FILE
                         File containing authorization token in format TOKEN_ID:TOKEN_SECRET
   -H HOST, --host HOST  Your domain with protocol prefix, example: https://example.com
-  -f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...], 
-                --formats {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]
+  -f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...], --formats {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]
                         Space separated list of formats to use for export.
   -c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...], --forbidden-chars FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]
                         Space separated list of symbols to be replaced with "_" in filenames.
   -u USER_AGENT, --user-agent USER_AGENT
-                        User agent header content. In situations where requests are blocked  
-                        because of bad client/unrecognized web browser/etc (like with CloudFlare tunnels),  
-                        change to some typical web browser user agent header.
+                        User agent header content. In situations where requests are blocked
+                        because of bad client/unrecognized web browser/etc (like with
+                        CloudFlare tunnels), change to some typical web browser user agent
+                        header.
   --additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]
-                        List of arbitrary additional HTTP headers to be sent with every HTTP request.  
-                        They can override default ones, including Authorization header.  
-                        Example: -u "Header1: value1" "Header2": value2
-  -l {pages,chapters,books} [{pages,chapters,books} ...], 
-                --level {pages,chapters,books} [{pages,chapters,books} ...]
+                        List of arbitrary additional HTTP headers to be sent with every HTTP
+                        request. They can override default ones, including Authorization
+                        header. IMPORTANT: these headers are also sent when downloading
+                        external attachments! Don't put here any private data.Example: -u
+                        "Header1: value1" "Header2: value2"
+  -l {pages,chapters,books} [{pages,chapters,books} ...], --level {pages,chapters,books} [{pages,chapters,books} ...]
                         Space separated list of levels at which should be export performed.
-  --force-update-files  Set this option to skip checking local files timestamps against  
-                        remote last edit timestamps. This will cause overwriting local files,  
-                        even if they seem to be already in newest version.
+  --force-update-files  Set this option to skip checking local files timestamps against remote
+                        last edit timestamps. This will cause overwriting local files, even if
+                        they seem to be already in newest version.
+  --dont-export-attachments
+                        Set this to prevent exporting attachments that were uploaded to
+                        BookStack.
+  --dont-export-external-attachments
+                        Set this to prevent exporting external attachments (from links).
   -V {debug,info,warning,error}, --log-level {debug,info,warning,error}
                         Set verbosity level.
 ```
@@ -68,4 +84,5 @@ options:
 - [x] ~~choosing verbosity level through command line parameter~~ Done
 - [x] ~~choosing on what level should the notes be exported (Books, Chapters, Pages)~~ Done
 - [x] ~~choosing if update note file only if the last edit timestamp from API is later that the local file timestamp~~ Done
+- [x] ~~exporting attachments~~
 - [ ] suggestions?

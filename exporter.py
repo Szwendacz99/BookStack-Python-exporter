@@ -9,6 +9,7 @@ import sys
 from typing import Dict, List, Union
 from urllib.request import urlopen, Request
 import urllib.parse
+import base64
 
 # (formatName, fileExtension)
 FORMATS: Dict['str', 'str'] = {
@@ -77,8 +78,10 @@ parser.add_argument('--additional-headers',
                     default=[],
                     help='List of arbitrary additional HTTP headers to be '
                     'sent with every HTTP request. They can override default'
-                    ' ones, including Authorization header. '
-                    'Example: -u "Header1: value1" "Header2": value2')
+                    ' ones, including Authorization header. IMPORTANT: '
+                    'these headers are also sent when downloading external '
+                    'attachments! Don\'t put here any private data.'
+                    'Example: -u "Header1: value1" "Header2: value2"')
 parser.add_argument(
     '-l',
     '--level',
@@ -94,7 +97,19 @@ parser.add_argument(
     help="Set this option to skip checking local files timestamps against "
     "remote last edit timestamps. This will cause overwriting local files,"
     " even if they seem to be already in newest version.")
+parser.add_argument(
+    '--dont-export-attachments',
+    action='store_true',
+    help=
+    "Set this to prevent exporting attachments that were uploaded to BookStack."
+)
+parser.add_argument(
+    '--dont-export-external-attachments',
+    action='store_true',
+    help="Set this to prevent exporting external attachments (from links).")
 parser.set_defaults(force_update_files=False)
+parser.set_defaults(dont_export_attachments=False)
+parser.set_defaults(dont_export_external_attachments=False)
 parser.add_argument('-V',
                     '--log-level',
                     type=str,
@@ -140,11 +155,17 @@ HEADERS = {
     'Authorization': f"Token {TOKEN}",
     'User-Agent': args.user_agent
 }
+HEADERS_NO_TOKEN = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'User-Agent': args.user_agent
+}
+
 for header in args.additional_headers:
     values = header.split(':', 1)
     if len(values) < 2:
         raise ValueError(f"Improper HTTP header specification: {header}")
     HEADERS[values[0]] = values[1]
+    HEADERS_NO_TOKEN[values[0]] = values[1]
 
 SKIP_TIMESTAMPS: bool = args.force_update_files
 
@@ -215,6 +236,7 @@ books: Dict[int, Node] = {}
 chapters: Dict[int, Node] = {}
 pages: Dict[int, Node] = {}
 pages_not_in_chapter: Dict[int, Node] = {}
+attachments: Dict[int, Node] = {}
 
 
 def api_timestamp_string_to_datetime(timestamp: str) -> datetime:
@@ -272,7 +294,7 @@ def api_get_listing(path: str) -> list:
         total = data['total']
         result += data['data']
 
-        debug(f"API listing got {total} items out of maximum {count}")
+        debug(f"API listing got {len(result)} items out of maximum {count}")
 
     return result
 
@@ -286,7 +308,7 @@ def check_if_update_needed(file_path: str, document: Node) -> bool:
     if not os.path.exists(file_path):
         debug(f"Document {file_path} is missing on disk, update needed.")
         return True
-    local_last_edit: datetime = datetime.utcfromtimestamp(
+    local_last_edit: datetime = datetime.fromtimestamp(
         os.path.getmtime(file_path))
     remote_last_edit: datetime = document.get_last_edit_timestamp()
 
@@ -306,8 +328,8 @@ def check_if_update_needed(file_path: str, document: Node) -> bool:
     return False
 
 
-def export(documents: List[Node], level: str):
-    """Save Node to file."""
+def export_doc(documents: List[Node], level: str):
+    """Save document-like Nodes to files."""
     for document in documents:
         make_dir(f"{FS_PATH}{os.path.sep}{document.get_path()}")
 
@@ -324,6 +346,55 @@ def export(documents: List[Node], level: str):
                 info(f"Saving {path}")
                 file.write(data)
 
+
+def export_attachments(attachments: List[Node]):
+    """Save attachment Nodes to files."""
+    for attachment in attachments:
+
+        base_path = attachment.get_path()
+        if attachment.parent is None:
+            base_path = f'__ATTACHMENTS_FROM_DELETED_PAGES__{os.path.sep}{base_path}'
+
+        make_dir(f"{FS_PATH}{os.path.sep}{base_path}")
+
+        path: str = f"{FS_PATH}{os.path.sep}{base_path}" + \
+            f"{os.path.sep}{attachment.name}"
+
+        if not check_if_update_needed(path, attachment):
+            continue
+
+        data = api_get_bytes(f'attachments/{attachment.get_id()}')
+        data = json.loads(data)
+        content = data['content']
+        content_url = urllib.parse.urlparse(content)
+
+        if content_url.scheme:
+            if args.dont_export_external_attachments:
+                continue
+            info(f"Downloading attachment from url: {content_url.geturl()}")
+            request: Request = Request(content_url.geturl(),
+                                       headers=HEADERS_NO_TOKEN)
+
+            with urlopen(request) as response:
+                if response.status >= 300:
+                    error(
+                        "Could not download link-type attachment from "
+                        f"'{content_url.geturl()}, got code {response.status}'!"
+                    )
+                    sys.exit(response.status)
+
+                with open(path, 'wb') as file:
+                    info(f"Saving {path}")
+                    file.write(response.read())
+        else:
+            with open(path, 'wb') as file:
+                info(f"Saving {path}")
+                file.write(base64.b64decode(content))
+
+
+#########################
+# Gathering data from api
+#########################
 
 info("Getting info about Shelves and their Books")
 
@@ -405,6 +476,26 @@ for page_data in api_get_listing('pages'):
           f"last edit: {page.get_last_edit_timestamp()}")
     pages[page.get_id()] = page
 
+if not args.dont_export_attachments:
+    info("Getting info about Attachments.")
+
+    for attachment_data in api_get_listing('attachments'):
+        last_edit_ts: datetime = api_timestamp_string_to_datetime(
+            attachment_data['updated_at'])
+        all_pages = {}
+        all_pages.update(pages)
+        all_pages.update(pages_not_in_chapter)
+        attachment = Node(attachment_data.get('name'),
+                          all_pages.get(attachment_data.get('uploaded_to')),
+                          attachment_data.get('id'), last_edit_ts)
+        debug(f"Attachment: \"{attachment.name}\", ID: {attachment.get_id()},"
+              f" last edit: {attachment.get_last_edit_timestamp()}")
+        attachments[attachment.get_id()] = attachment
+
+#########################
+# Exporting data from api
+#########################
+
 files: List[Node] = []
 EXPORT_PAGES_NOT_IN_CHAPTER: bool = False
 
@@ -417,8 +508,14 @@ for lvl in LEVEL_CHOICE:
     elif lvl == 'books':
         files = list(books.values())
 
-    export(files, lvl)
+    export_doc(files, lvl)
 
 if EXPORT_PAGES_NOT_IN_CHAPTER:
     info("Exporting pages that are not in chapter...")
-    export(list(pages_not_in_chapter.values()), 'pages')
+    export_doc(list(pages_not_in_chapter.values()), 'pages')
+
+if not args.dont_export_attachments:
+    export_attachments(list(attachments.values()))
+
+info("Finished")
+sys.exit(0)
