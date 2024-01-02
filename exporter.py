@@ -10,6 +10,8 @@ from typing import Dict, List, Union
 from urllib.request import urlopen, Request
 import urllib.parse
 import base64
+from time import time
+from time import sleep
 
 # (formatName, fileExtension)
 FORMATS: Dict['str', 'str'] = {
@@ -56,6 +58,11 @@ parser.add_argument('-f',
                     nargs="+",
                     help='Space separated list of formats to use for export.',
                     choices=FORMATS.keys())
+parser.add_argument('--rate-limit',
+                    type=int,
+                    default=180,
+                    help='How many api requests can be made in a minute. '
+                    'Default is 180 (BookStack defaults)')
 parser.add_argument('-c',
                     '--forbidden-chars',
                     type=str,
@@ -97,12 +104,9 @@ parser.add_argument(
     help="Set this option to skip checking local files timestamps against "
     "remote last edit timestamps. This will cause overwriting local files,"
     " even if they seem to be already in newest version.")
-parser.add_argument(
-    '--dont-export-attachments',
-    action='store_true',
-    help=
-    "Set this to prevent exporting attachments that were uploaded to BookStack."
-)
+parser.add_argument('--dont-export-attachments',
+                    action='store_true',
+                    help="Set this to prevent exporting any attachments.")
 parser.add_argument(
     '--dont-export-external-attachments',
     action='store_true',
@@ -168,6 +172,31 @@ for header in args.additional_headers:
     HEADERS_NO_TOKEN[values[0]] = values[1]
 
 SKIP_TIMESTAMPS: bool = args.force_update_files
+
+
+class ApiRateLimiter:
+
+    def __init__(self, rate_limit: int) -> None:
+        self.__rate_limit = rate_limit
+        info(f"API rate limit: {self.__rate_limit}/min")
+        self.__requests_times: List[float] = []
+
+    def limit_rate_request(self):
+        """Count another request and wait minimal required time if limit is reached."""
+        current_time = time()
+        self.__requests_times.append(current_time)
+        # filter out requests older than 60s ago
+        self.__requests_times = list(
+            filter(lambda x: current_time - x <= 60, self.__requests_times))
+
+        # sleep until oldest remembered request is more than 60s ago
+        if len(self.__requests_times) > self.__rate_limit:
+            wait_time = self.__requests_times[0] + 60 - current_time
+            info(f"API Rate limit reached, waiting {round(wait_time, 2)}s")
+            sleep(wait_time)
+
+
+api_rate_limiter = ApiRateLimiter(args.rate_limit)
 
 
 class Node:
@@ -262,6 +291,7 @@ def api_get_bytes(path: str, **kwargs) -> bytes:
 
     request: Request = Request(request_path, headers=HEADERS)
 
+    api_rate_limiter.limit_rate_request()
     with urlopen(request) as response:
         if response.status == 403:
             error("403 Forbidden, check your token!")

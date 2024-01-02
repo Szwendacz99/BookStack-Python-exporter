@@ -18,12 +18,13 @@ Requirements:
 Full example on how to use the script:
 1. Clone the repo 
 2. next to the script place token.txt file containing token id and token secret in format: TOKEN_ID:TOKEN_SECRET
-3. in the same directory run the command, specifying your app domain with https prefix (every parameter is optional as it have default value, this is a full possible example):
+3. in the same directory run the command, specifying your app domain with https prefix (every parameter is optional as it have default value, this is an example):
 ```bash
 python exporter.py \
     -H https://wiki.example.com \
     -f pdf markdown plaintext html \
     -l pages chapters books \
+    --rate-limit 180 \
     -c "/" "#" \
     --force-update-files \
     -t ./token.txt \
@@ -37,45 +38,57 @@ Customization:
 ```text
 usage: exporter.py [-h] [-p PATH] [-t TOKEN_FILE] [-H HOST]
                    [-f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]]
+                   [--rate-limit RATE_LIMIT]
                    [-c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]] [-u USER_AGENT]
                    [--additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]]
                    [-l {pages,chapters,books} [{pages,chapters,books} ...]]
                    [--force-update-files] [--dont-export-attachments]
-                   [--dont-export-external-attachments] [-V {debug,info,warning,error}]
+                   [--dont-export-external-attachments]
+                   [-V {debug,info,warning,error}]
 
 BookStack exporter
 
-options:
+optional arguments:
   -h, --help            show this help message and exit
   -p PATH, --path PATH  Path where exported files will be placed.
   -t TOKEN_FILE, --token-file TOKEN_FILE
-                        File containing authorization token in format TOKEN_ID:TOKEN_SECRET
-  -H HOST, --host HOST  Your domain with protocol prefix, example: https://example.com
+                        File containing authorization token in format
+                        TOKEN_ID:TOKEN_SECRET
+  -H HOST, --host HOST  Your domain with protocol prefix, example:
+                        https://example.com
   -f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...], --formats {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]
                         Space separated list of formats to use for export.
+  --rate-limit RATE_LIMIT
+                        How many api requests can be made in a minute. Default
+                        is 180 (BookStack defaults)
   -c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...], --forbidden-chars FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]
-                        Space separated list of symbols to be replaced with "_" in filenames.
+                        Space separated list of symbols to be replaced with
+                        "_" in filenames.
   -u USER_AGENT, --user-agent USER_AGENT
-                        User agent header content. In situations where requests are blocked
-                        because of bad client/unrecognized web browser/etc (like with
-                        CloudFlare tunnels), change to some typical web browser user agent
-                        header.
+                        User agent header content. In situations where
+                        requests are blocked because of bad
+                        client/unrecognized web browser/etc (like with
+                        CloudFlare tunnels), change to some typical web
+                        browser user agent header.
   --additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]
-                        List of arbitrary additional HTTP headers to be sent with every HTTP
-                        request. They can override default ones, including Authorization
-                        header. IMPORTANT: these headers are also sent when downloading
-                        external attachments! Don't put here any private data.Example: -u
-                        "Header1: value1" "Header2: value2"
+                        List of arbitrary additional HTTP headers to be sent
+                        with every HTTP request. They can override default
+                        ones, including Authorization header. IMPORTANT: these
+                        headers are also sent when downloading external
+                        attachments! Don't put here any private data.Example:
+                        -u "Header1: value1" "Header2: value2"
   -l {pages,chapters,books} [{pages,chapters,books} ...], --level {pages,chapters,books} [{pages,chapters,books} ...]
-                        Space separated list of levels at which should be export performed.
-  --force-update-files  Set this option to skip checking local files timestamps against remote
-                        last edit timestamps. This will cause overwriting local files, even if
-                        they seem to be already in newest version.
+                        Space separated list of levels at which should be
+                        export performed.
+  --force-update-files  Set this option to skip checking local files
+                        timestamps against remote last edit timestamps. This
+                        will cause overwriting local files, even if they seem
+                        to be already in newest version.
   --dont-export-attachments
-                        Set this to prevent exporting attachments that were uploaded to
-                        BookStack.
+                        Set this to prevent exporting any attachments.
   --dont-export-external-attachments
-                        Set this to prevent exporting external attachments (from links).
+                        Set this to prevent exporting external attachments
+                        (from links).
   -V {debug,info,warning,error}, --log-level {debug,info,warning,error}
                         Set verbosity level.
 ```
@@ -85,4 +98,5 @@ options:
 - [x] ~~choosing on what level should the notes be exported (Books, Chapters, Pages)~~ Done
 - [x] ~~choosing if update note file only if the last edit timestamp from API is later that the local file timestamp~~ Done
 - [x] ~~exporting attachments~~
+- [x] ~~api rate limiting~~
 - [ ] suggestions?
