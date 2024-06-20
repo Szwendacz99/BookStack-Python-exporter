@@ -13,6 +13,11 @@ import base64
 from time import time
 from time import sleep
 
+# Ignore Self Signed Certificates
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+
 # (formatName, fileExtension)
 FORMATS: Dict['str', 'str'] = {
     'markdown': 'md',
@@ -292,7 +297,7 @@ def api_get_bytes(path: str, **kwargs) -> bytes:
     request: Request = Request(request_path, headers=HEADERS)
 
     api_rate_limiter.limit_rate_request()
-    with urlopen(request) as response:
+    with urlopen(request, context=ctx) as response:
         if response.status == 403:
             error("403 Forbidden, check your token!")
             sys.exit(response.status)
@@ -405,7 +410,7 @@ def export_attachments(attachments: List[Node]):
             request: Request = Request(content_url.geturl(),
                                        headers=HEADERS_NO_TOKEN)
 
-            with urlopen(request) as response:
+            with urlopen(request, context=ctx) as response:
                 if response.status >= 300:
                     error(
                         "Could not download link-type attachment from "
