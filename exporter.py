@@ -6,6 +6,7 @@ from datetime import datetime
 from logging import info, error, debug
 from pathlib import Path
 import sys
+import ssl
 from typing import Dict, List, Union
 from urllib.request import urlopen, Request
 import urllib.parse
