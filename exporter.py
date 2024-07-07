@@ -6,7 +6,7 @@ from datetime import datetime
 from logging import info, error, debug
 from pathlib import Path
 import sys
-from typing import Dict, List, Union, overload, override
+from typing import Dict, List, Union, override
 from urllib.request import urlopen, Request
 import urllib.parse
 import base64
@@ -395,6 +395,19 @@ def api_get_listing(path: str) -> list:
 
     return result
 
+def image_translate_path(img_path: str, document_path: str) -> str:
+    """Update remote path attribute string to be local image path.
+
+    img_path: image 'path' attribute from api
+    document_path: Node class path attribute of doc containing the image
+    """
+    relative_path = img_path.replace(
+    "/uploads/images/gallery",
+    f"{document_path}{os.path.sep}{args.images_dir}")
+    # not every image will have path replaced, so making it absolute is in
+    # next step
+    return f"{FS_PATH}{os.path.sep}{relative_path}"
+
 
 def check_if_update_needed(file_path: str, document: Node) -> bool:
     """Check if a Node need updating on disk, according to timestamps."""
@@ -424,6 +437,21 @@ def check_if_update_needed(file_path: str, document: Node) -> bool:
           "outdated documents, skipping updating.")
     return False
 
+def update_markdown_image_tags(doc_ids: List[int], data: bytes) -> bytes:
+    """Update all image tags to point to exported images in given markdown data."""
+    linked_images = [
+        x for x in images.values()
+        if x.get_parent_id() in doc_ids
+    ]
+    for img in linked_images:
+        img_data = api_get_dict(f'image-gallery/{img.get_id()}')
+        md_tag = img_data['content']['markdown'].encode()
+        img_path = image_translate_path(img.get_path(), '.')
+        new_tag = f'![{img.name}]({img_path})'
+        debug(f"Replacing markdown image tag '{md_tag}' to '{new_tag}'")
+        data = data.replace(md_tag, new_tag.encode())
+    return data
+
 
 def export_doc(documents: List[Node], level: str):
     """Save document-like Nodes to files."""
@@ -439,6 +467,9 @@ def export_doc(documents: List[Node], level: str):
 
             data: bytes = api_get_bytes(
                 f'{level}/{document.get_id()}/export/{v_format}')
+            if args.markdown_images and v_format == 'markdown':
+                data = update_markdown_image_tags(document.get_all_ids(), data)
+
             with open(path, 'wb') as file:
                 info(f"Saving {path}")
                 file.write(data)
@@ -446,21 +477,19 @@ def export_doc(documents: List[Node], level: str):
         if not args.images and not args.markdown_images:
             return
         # download images
+        all_ids = document.get_all_ids()
         linked_images = [
             x for x in images.values()
-            if x.get_parent_id() == document.get_id()
+            if x.get_parent_id() in all_ids
         ]
         for img in linked_images:
             # replacement below will not replace stuff if the image
             # is not a gallery image (for example it is a drawio image).
             # It will be then saved on that path, in root export dir.
-            path = img.get_path().replace(
-                "/uploads/images/gallery",
-                f"{document.get_path()}{os.path.sep}{args.images_dir}")
+            path = image_translate_path(img.get_path(), document.get_path())
             img_dir = os.path.dirname(path)
-            make_dir(f"{FS_PATH}{os.path.sep}{img_dir}")
+            make_dir(img_dir)
 
-            path: str = f"{FS_PATH}{os.path.sep}{path}"
             if not check_if_update_needed(path, img):
                 continue
 
