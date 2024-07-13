@@ -7,7 +7,7 @@ from logging import info, error, debug
 from pathlib import Path
 import re
 import sys
-from typing import Dict, List, Union, override
+from typing import Dict, List, Union
 from urllib.request import urlopen, Request
 import urllib.parse
 import base64
@@ -322,7 +322,6 @@ class AttachedFile(Node):
     def get_url(self) -> str:
         return self.__url
 
-    @override
     def get_path(self) -> str:
         """Path value of the object from api."""
         return self.__path
