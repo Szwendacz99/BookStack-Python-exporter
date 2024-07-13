@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from logging import info, error, debug
 from pathlib import Path
+import re
 import sys
 from typing import Dict, List, Union, override
 from urllib.request import urlopen, Request
@@ -118,10 +119,15 @@ parser.add_argument(
     action='store_true',
     default=False,
     help="The same as --images, but will also update image links in "
-    "exported markdown files (if they are bein exported).")
-parser.add_argument('--images_dir',
+    "exported markdown files (if they are bein exported)."
+    " Warning: this is experimental, as API does not provide a way to "
+    "know what images are actually on the page. Therefore for markdown data"
+    " all ']({URL}' occurences will be replaced with local, relative "
+    "path to images, and additionally any '/scaled-\d+-/' regex match"
+    " will be replaced with '/' so that scaled images are also displayed")
+parser.add_argument('--images-dir',
                     type=str,
-                    default="exported-images-gallery",
+                    default="exported-images",
                     help='When exporting images, they will be organized in'
                     ' directory located at the same path as exported document.'
                     ' This parameter defines name of this directory.')
@@ -288,6 +294,12 @@ class Node:
     def get_id(self) -> int:
         return self.__node_id
 
+    def parents_levels(self) -> int:
+        """Calculate nesting level of this Node."""
+        if self.__parent is not None:
+            return 1 + self.__parent.parents_levels()
+        return 0
+
 
 class AttachedFile(Node):
 
@@ -395,18 +407,13 @@ def api_get_listing(path: str) -> list:
 
     return result
 
-def image_translate_path(img_path: str, document_path: str) -> str:
+
+def image_translate_path(img_path: str) -> str:
     """Update remote path attribute string to be local image path.
 
     img_path: image 'path' attribute from api
-    document_path: Node class path attribute of doc containing the image
     """
-    relative_path = img_path.replace(
-    "/uploads/images/gallery",
-    f"{document_path}{os.path.sep}{args.images_dir}")
-    # not every image will have path replaced, so making it absolute is in
-    # next step
-    return f"{FS_PATH}{os.path.sep}{relative_path}"
+    return f"{FS_PATH}{os.path.sep}{args.images_dir}{img_path}"
 
 
 def check_if_update_needed(file_path: str, document: Node) -> bool:
@@ -437,20 +444,20 @@ def check_if_update_needed(file_path: str, document: Node) -> bool:
           "outdated documents, skipping updating.")
     return False
 
-def update_markdown_image_tags(doc_ids: List[int], data: bytes) -> bytes:
+
+def update_markdown_image_tags(doc: Node, data: bytes) -> bytes:
     """Update all image tags to point to exported images in given markdown data."""
-    linked_images = [
-        x for x in images.values()
-        if x.get_parent_id() in doc_ids
-    ]
-    for img in linked_images:
-        img_data = api_get_dict(f'image-gallery/{img.get_id()}')
-        md_tag = img_data['content']['markdown'].encode()
-        img_path = image_translate_path(img.get_path(), '.')
-        new_tag = f'![{img.name}]({img_path})'
-        debug(f"Replacing markdown image tag '{md_tag}' to '{new_tag}'")
-        data = data.replace(md_tag, new_tag.encode())
-    return data
+    levels = doc.parents_levels()
+    # "](" is a part of markdown image tag, used here to
+    # try preventing replacing host url in other paces
+    dir_fallback = ']('
+    dir_fallback += '../' * levels
+
+    host = removesuffix(args.host, '/')
+    dir_fallback += args.images_dir
+    data = data.replace(f']({host}'.encode(), dir_fallback.encode())
+    data_str = re.sub(r'/scaled-\d+-/', r'/', data.decode())
+    return data_str.encode()
 
 
 def export_doc(documents: List[Node], level: str):
@@ -468,32 +475,8 @@ def export_doc(documents: List[Node], level: str):
             data: bytes = api_get_bytes(
                 f'{level}/{document.get_id()}/export/{v_format}')
             if args.markdown_images and v_format == 'markdown':
-                data = update_markdown_image_tags(document.get_all_ids(), data)
+                data = update_markdown_image_tags(document, data)
 
-            with open(path, 'wb') as file:
-                info(f"Saving {path}")
-                file.write(data)
-
-        if not args.images and not args.markdown_images:
-            return
-        # download images
-        all_ids = document.get_all_ids()
-        linked_images = [
-            x for x in images.values()
-            if x.get_parent_id() in all_ids
-        ]
-        for img in linked_images:
-            # replacement below will not replace stuff if the image
-            # is not a gallery image (for example it is a drawio image).
-            # It will be then saved on that path, in root export dir.
-            path = image_translate_path(img.get_path(), document.get_path())
-            img_dir = os.path.dirname(path)
-            make_dir(img_dir)
-
-            if not check_if_update_needed(path, img):
-                continue
-
-            data: bytes = api_get_bytes(img.get_url(), raw_url=True)
             with open(path, 'wb') as file:
                 info(f"Saving {path}")
                 file.write(data)
@@ -542,6 +525,21 @@ def export_attachments(attachments: List[Node]):
             with open(path, 'wb') as file:
                 info(f"Saving {path}")
                 file.write(base64.b64decode(content))
+
+
+def export_images():
+    for img in images.values():
+        path = image_translate_path(img.get_path())
+        img_dir = os.path.dirname(path)
+        make_dir(img_dir)
+
+        if not check_if_update_needed(path, img):
+            continue
+
+        data: bytes = api_get_bytes(img.get_url(), raw_url=True)
+        with open(path, 'wb') as file:
+            info(f"Saving {path}")
+            file.write(data)
 
 
 #########################
@@ -684,6 +682,9 @@ if EXPORT_PAGES_NOT_IN_CHAPTER:
 
 if not args.dont_export_attachments:
     export_attachments(list(attachments.values()))
+
+if args.images or args.markdown_images:
+    export_images()
 
 info("Finished")
 sys.exit(0)
