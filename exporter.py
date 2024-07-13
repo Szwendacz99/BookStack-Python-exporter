@@ -5,8 +5,9 @@ import os
 from datetime import datetime
 from logging import info, error, debug
 from pathlib import Path
+import re
 import sys
-from typing import Dict, List, Union
+from typing import Dict, List, Union, override
 from urllib.request import urlopen, Request
 import urllib.parse
 import base64
@@ -101,19 +102,44 @@ parser.add_argument(
 parser.add_argument(
     '--force-update-files',
     action='store_true',
+    default=False,
     help="Set this option to skip checking local files timestamps against "
     "remote last edit timestamps. This will cause overwriting local files,"
     " even if they seem to be already in newest version.")
+parser.add_argument(
+    '--images',
+    action='store_true',
+    default=False,
+    help="Download images and place them in directory next to the object"
+    " (like page) where they were uploaded. The directory name will be the"
+    " same as directory it was in uploads on the server "
+    "(for example '2021-10').")
+parser.add_argument(
+    '--markdown-images',
+    action='store_true',
+    default=False,
+    help="The same as --images, but will also update image links in "
+    "exported markdown files (if they are bein exported)."
+    " Warning: this is experimental, as API does not provide a way to "
+    "know what images are actually on the page. Therefore for markdown data"
+    " all ']({URL}' occurences will be replaced with local, relative "
+    "path to images, and additionally any '/scaled-\d+-/' regex match"
+    " will be replaced with '/' so that scaled images are also displayed")
+parser.add_argument('--images-dir',
+                    type=str,
+                    default="exported-images",
+                    help='When exporting images, they will be organized in'
+                    ' directory located at the same path as exported document.'
+                    ' This parameter defines name of this directory.')
 parser.add_argument('--dont-export-attachments',
+                    default=False,
                     action='store_true',
                     help="Set this to prevent exporting any attachments.")
 parser.add_argument(
     '--dont-export-external-attachments',
     action='store_true',
+    default=False,
     help="Set this to prevent exporting external attachments (from links).")
-parser.set_defaults(force_update_files=False)
-parser.set_defaults(dont_export_attachments=False)
-parser.set_defaults(dont_export_external_attachments=False)
 parser.add_argument('-V',
                     '--log-level',
                     type=str,
@@ -251,6 +277,15 @@ class Node:
     def add_child(self, child: 'Node'):
         self.__children.append(child)
 
+    def get_all_ids(self) -> List[int]:
+        """Return list containing id of this node, and all child nodes."""
+        ids = [self.get_id()]
+        for child in self.__children:
+            child_ids = child.get_all_ids()
+            for id in child_ids:
+                ids.append(id)
+        return ids
+
     def get_path(self) -> str:
         if self.__parent is None:
             return "."
@@ -259,6 +294,41 @@ class Node:
     def get_id(self) -> int:
         return self.__node_id
 
+    def parents_levels(self) -> int:
+        """Calculate nesting level of this Node."""
+        if self.__parent is not None:
+            return 1 + self.__parent.parents_levels()
+        return 0
+
+
+class AttachedFile(Node):
+
+    def __init__(self, name: str, parent_id: int, url: str, path: str,
+                 node_id: int, last_edit_timestamp: datetime):
+        """
+        name: filename
+        parent_id: uploaded_to value from api
+        url: http url directly for file download
+        path: path value of the object from api (filepath)
+        node_id: id of the object
+        last_edit_timestamp: timestamp from updated_at api field
+        """
+        super().__init__(name, None, node_id, last_edit_timestamp)
+        self.__parent_id = parent_id
+        self.__url = url
+        self.__path = path
+
+    def get_parent_id(self) -> int:
+        return self.__parent_id
+
+    def get_url(self) -> str:
+        return self.__url
+
+    @override
+    def get_path(self) -> str:
+        """Path value of the object from api."""
+        return self.__path
+
 
 shelves: Dict[int, Node] = {}
 books: Dict[int, Node] = {}
@@ -266,6 +336,7 @@ chapters: Dict[int, Node] = {}
 pages: Dict[int, Node] = {}
 pages_not_in_chapter: Dict[int, Node] = {}
 attachments: Dict[int, Node] = {}
+images: Dict[int, AttachedFile] = {}
 
 
 def api_timestamp_string_to_datetime(timestamp: str) -> datetime:
@@ -280,8 +351,16 @@ def make_dir(path: str):
     path_obj.mkdir(exist_ok=True, parents=True)
 
 
-def api_get_bytes(path: str, **kwargs) -> bytes:
+def api_get_bytes(path: str, raw_url: bool = False, **kwargs) -> bytes:
+    """
+    Retrieve bytes on specific relative api path.
+
+    If raw_url is set to true, it will be accessed directly, without
+    prefixing with base api url.
+    """
     request_path: str = f'{API_PREFIX}/{path}'
+    if raw_url:
+        request_path = path
 
     if len(kwargs) > 0:
         params: str = urllib.parse.urlencode(kwargs)
@@ -329,6 +408,14 @@ def api_get_listing(path: str) -> list:
     return result
 
 
+def image_translate_path(img_path: str) -> str:
+    """Update remote path attribute string to be local image path.
+
+    img_path: image 'path' attribute from api
+    """
+    return f"{FS_PATH}{os.path.sep}{args.images_dir}{img_path}"
+
+
 def check_if_update_needed(file_path: str, document: Node) -> bool:
     """Check if a Node need updating on disk, according to timestamps."""
     if SKIP_TIMESTAMPS:
@@ -358,6 +445,21 @@ def check_if_update_needed(file_path: str, document: Node) -> bool:
     return False
 
 
+def update_markdown_image_tags(doc: Node, data: bytes) -> bytes:
+    """Update all image tags to point to exported images in given markdown data."""
+    levels = doc.parents_levels()
+    # "](" is a part of markdown image tag, used here to
+    # try preventing replacing host url in other paces
+    dir_fallback = ']('
+    dir_fallback += '../' * levels
+
+    host = removesuffix(args.host, '/')
+    dir_fallback += args.images_dir
+    data = data.replace(f']({host}'.encode(), dir_fallback.encode())
+    data_str = re.sub(r'/scaled-\d+-/', r'/', data.decode())
+    return data_str.encode()
+
+
 def export_doc(documents: List[Node], level: str):
     """Save document-like Nodes to files."""
     for document in documents:
@@ -372,6 +474,9 @@ def export_doc(documents: List[Node], level: str):
 
             data: bytes = api_get_bytes(
                 f'{level}/{document.get_id()}/export/{v_format}')
+            if args.markdown_images and v_format == 'markdown':
+                data = update_markdown_image_tags(document, data)
+
             with open(path, 'wb') as file:
                 info(f"Saving {path}")
                 file.write(data)
@@ -420,6 +525,21 @@ def export_attachments(attachments: List[Node]):
             with open(path, 'wb') as file:
                 info(f"Saving {path}")
                 file.write(base64.b64decode(content))
+
+
+def export_images():
+    for img in images.values():
+        path = image_translate_path(img.get_path())
+        img_dir = os.path.dirname(path)
+        make_dir(img_dir)
+
+        if not check_if_update_needed(path, img):
+            continue
+
+        data: bytes = api_get_bytes(img.get_url(), raw_url=True)
+        with open(path, 'wb') as file:
+            info(f"Saving {path}")
+            file.write(data)
 
 
 #########################
@@ -522,6 +642,22 @@ if not args.dont_export_attachments:
               f" last edit: {attachment.get_last_edit_timestamp()}")
         attachments[attachment.get_id()] = attachment
 
+if args.images or args.markdown_images:
+    info("Getting info about Image gallery.")
+
+    for image_data in api_get_listing('image-gallery'):
+        last_edit_ts: datetime = api_timestamp_string_to_datetime(
+            image_data['updated_at'])
+        image = AttachedFile(name=image_data.get('name'),
+                             parent_id=image_data.get('uploaded_to'),
+                             url=image_data.get('url'),
+                             path=image_data.get('path'),
+                             node_id=image_data.get('id'),
+                             last_edit_timestamp=last_edit_ts)
+        debug(f"Image: \"{image.name}\", ID: {image.get_id()},"
+              f" last edit: {image.get_last_edit_timestamp()}")
+        images[image.get_id()] = image
+
 #########################
 # Exporting data from api
 #########################
@@ -546,6 +682,9 @@ if EXPORT_PAGES_NOT_IN_CHAPTER:
 
 if not args.dont_export_attachments:
     export_attachments(list(attachments.values()))
+
+if args.images or args.markdown_images:
+    export_images()
 
 info("Finished")
 sys.exit(0)
