@@ -80,9 +80,8 @@ options:
   --force-update-files  Set this option to skip checking local files timestamps against remote
                         last edit timestamps. This will cause overwriting local files, even if
                         they seem to be already in newest version.
-  --images              Download images and place them in directory next to the object (like
-                        page) where they were uploaded. The directory name will be the same as
-                        directory it was in uploads on the server (for example '2021-10').
+  --images              Download images and place them in dedicated directory in export path
+                        root, preserving their internal paths
   --markdown-images     The same as --images, but will also update image links in exported
                         markdown files (if they are bein exported). Warning: this is
                         experimental, as API does not provide a way to know what images are

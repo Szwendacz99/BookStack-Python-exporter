@@ -110,10 +110,8 @@ parser.add_argument(
     '--images',
     action='store_true',
     default=False,
-    help="Download images and place them in directory next to the object"
-    " (like page) where they were uploaded. The directory name will be the"
-    " same as directory it was in uploads on the server "
-    "(for example '2021-10').")
+    help="Download images and place them in dedicated directory in export path"
+    " root, preserving their internal paths")
 parser.add_argument(
     '--markdown-images',
     action='store_true',
