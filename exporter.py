@@ -123,7 +123,7 @@ parser.add_argument(
     " Warning: this is experimental, as API does not provide a way to "
     "know what images are actually on the page. Therefore for markdown data"
     " all ']({URL}' occurences will be replaced with local, relative "
-    "path to images, and additionally any '/scaled-\d+-/' regex match"
+    "path to images, and additionally any '/scaled-\\d+-/' regex match"
     " will be replaced with '/' so that scaled images are also displayed")
 parser.add_argument('--images-dir',
                     type=str,
