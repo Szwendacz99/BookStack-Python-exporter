@@ -46,8 +46,9 @@ usage: exporter.py [-h] [-p PATH] [-t TOKEN_FILE] [-H HOST]
                    [--additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]]
                    [-l {pages,chapters,books} [{pages,chapters,books} ...]]
                    [--force-update-files] [--images] [--markdown-images]
-                   [--images-dir IMAGES_DIR] [--dont-export-attachments]
-                   [--dont-export-external-attachments] [-V {debug,info,warning,error}]
+                   [--images-dir IMAGES_DIR] [--skip-broken-image-links]
+                   [--dont-export-attachments] [--dont-export-external-attachments]
+                   [-V {debug,info,warning,error}]
 
 BookStack exporter
 
@@ -93,6 +94,10 @@ options:
                         When exporting images, they will be organized in directory located at
                         the same path as exported document. This parameter defines name of
                         this directory.
+  --skip-broken-image-links
+                        Don't fail and skip downloading images if their url obtained from
+                        images gallery API seem broken (image cannot be downloaded OR fails to
+                        download).
   --dont-export-attachments
                         Set this to prevent exporting any attachments.
   --dont-export-external-attachments
