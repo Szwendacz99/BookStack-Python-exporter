@@ -9,6 +9,7 @@ import re
 import sys
 from typing import Dict, List, Union
 from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
 import urllib.parse
 import base64
 from time import time
@@ -129,6 +130,12 @@ parser.add_argument('--images-dir',
                     help='When exporting images, they will be organized in'
                     ' directory located at the same path as exported document.'
                     ' This parameter defines name of this directory.')
+parser.add_argument('--skip-broken-image-links',
+                    default=False,
+                    action='store_true',
+                    help="Don't fail and skip downloading images if their "
+                    "url obtained from images gallery API seem broken "
+                    "(image cannot be downloaded OR fails to download).")
 parser.add_argument('--dont-export-attachments',
                     default=False,
                     action='store_true',
@@ -196,6 +203,7 @@ for header in args.additional_headers:
     HEADERS_NO_TOKEN[values[0]] = values[1]
 
 SKIP_TIMESTAMPS: bool = args.force_update_files
+SKIP_BROKEN_IMAGE_LINKS: bool = args.skip_broken_image_links
 
 
 class ApiRateLimiter:
@@ -533,7 +541,14 @@ def export_images():
         if not check_if_update_needed(path, img):
             continue
 
-        data: bytes = api_get_bytes(img.get_url(), raw_url=True)
+        try:
+            data: bytes = api_get_bytes(img.get_url(), raw_url=True)
+        except (URLError, HTTPError) as exc:
+            error(f"Failed downloading image '{img.get_url()}': {exc}")
+            if not SKIP_BROKEN_IMAGE_LINKS:
+                sys.exit(1)
+            else:
+                continue
         with open(path, 'wb') as file:
             info(f"Saving {path}")
             file.write(data)
