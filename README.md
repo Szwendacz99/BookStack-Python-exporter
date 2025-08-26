@@ -24,7 +24,7 @@ Full example on how to use the script:
 ```bash
 python exporter.py \
     -H https://wiki.example.com \
-    -f pdf markdown plaintext html \
+    -f pdf markdown plaintext html zip \
     -l pages chapters books \
     --rate-limit 180 \
     -c "/" "#" \
@@ -40,7 +40,7 @@ python exporter.py \
 Customization:
 ```text
 usage: exporter.py [-h] [-p PATH] [-t TOKEN_FILE] [-H HOST]
-                   [-f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]]
+                   [-f {markdown,plaintext,pdf,html,zip} [{markdown,plaintext,pdf,html,zip} ...]]
                    [--rate-limit RATE_LIMIT] [-c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]]
                    [-u USER_AGENT]
                    [--additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]]
@@ -58,7 +58,7 @@ options:
   -t TOKEN_FILE, --token-file TOKEN_FILE
                         File containing authorization token in format TOKEN_ID:TOKEN_SECRET
   -H HOST, --host HOST  Your domain with protocol prefix, example: https://example.com
-  -f {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...], --formats {markdown,plaintext,pdf,html} [{markdown,plaintext,pdf,html} ...]
+  -f {markdown,plaintext,pdf,html,zip} [{markdown,plaintext,pdf,html,zip} ...], --formats {markdown,plaintext,pdf,html,zip} [{markdown,plaintext,pdf,html,zip} ...]
                         Space separated list of formats to use for export.
   --rate-limit RATE_LIMIT
                         How many api requests can be made in a minute. Default is 180

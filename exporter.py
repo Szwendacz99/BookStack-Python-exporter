@@ -20,7 +20,8 @@ FORMATS: Dict['str', 'str'] = {
     'markdown': 'md',
     'plaintext': 'txt',
     'pdf': 'pdf',
-    'html': 'html'
+    'html': 'html',
+    'zip': 'zip'
 }
 
 LEVELS = ['pages', 'chapters', 'books']
