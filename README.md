@@ -39,70 +39,52 @@ python exporter.py \
 
 Customization:
 ```text
-usage: exporter.py [-h] [-p PATH] [-t TOKEN_FILE] [-H HOST]
-                   [-f {markdown,plaintext,pdf,html,zip} [{markdown,plaintext,pdf,html,zip} ...]]
-                   [--rate-limit RATE_LIMIT] [-c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]]
-                   [-u USER_AGENT]
-                   [--additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]]
-                   [-l {pages,chapters,books} [{pages,chapters,books} ...]]
-                   [--force-update-files] [--images] [--markdown-images]
-                   [--images-dir IMAGES_DIR] [--skip-broken-image-links]
-                   [--dont-export-attachments] [--dont-export-external-attachments]
-                   [-V {debug,info,warning,error}]
-
-BookStack exporter
-
 options:
   -h, --help            show this help message and exit
-  -p PATH, --path PATH  Path where exported files will be placed.
-  -t TOKEN_FILE, --token-file TOKEN_FILE
+  -p, --path PATH       Path where exported files will be placed.
+  -t, --token-file TOKEN_FILE
                         File containing authorization token in format TOKEN_ID:TOKEN_SECRET
-  -H HOST, --host HOST  Your domain with protocol prefix, example: https://example.com
-  -f {markdown,plaintext,pdf,html,zip} [{markdown,plaintext,pdf,html,zip} ...], --formats {markdown,plaintext,pdf,html,zip} [{markdown,plaintext,pdf,html,zip} ...]
+  -H, --host HOST       Your domain with protocol prefix, example: https://example.com
+  -f, --formats {markdown,plaintext,pdf,html,zip} [{markdown,plaintext,pdf,html,zip} ...]
                         Space separated list of formats to use for export.
   --rate-limit RATE_LIMIT
-                        How many api requests can be made in a minute. Default is 180
-                        (BookStack defaults)
-  -c FORBIDDEN_CHARS [FORBIDDEN_CHARS ...], --forbidden-chars FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]
+                        How many api requests can be made in a minute. Default is 180 (BookStack
+                        defaults)
+  -c, --forbidden-chars FORBIDDEN_CHARS [FORBIDDEN_CHARS ...]
                         Space separated list of symbols to be replaced with "_" in filenames.
-  -u USER_AGENT, --user-agent USER_AGENT
-                        User agent header content. In situations where requests are blocked
-                        because of bad client/unrecognized web browser/etc (like with
-                        CloudFlare tunnels), change to some typical web browser user agent
-                        header.
+  -u, --user-agent USER_AGENT
+                        User agent header content. In situations where requests are blocked because of
+                        bad client/unrecognized web browser/etc (like with CloudFlare tunnels), change to
+                        some typical web browser user agent header.
   --additional-headers ADDITIONAL_HEADERS [ADDITIONAL_HEADERS ...]
-                        List of arbitrary additional HTTP headers to be sent with every HTTP
-                        request. They can override default ones, including Authorization
-                        header. IMPORTANT: these headers are also sent when downloading
-                        external attachments! Don't put here any private data.Example: -u
-                        "Header1: value1" "Header2: value2"
-  -l {pages,chapters,books} [{pages,chapters,books} ...], --level {pages,chapters,books} [{pages,chapters,books} ...]
+                        List of arbitrary additional HTTP headers to be sent with every HTTP request.
+                        They can override default ones, including Authorization header. IMPORTANT: these
+                        headers are also sent when downloading external attachments! Don't put here any
+                        private data.Example: -u "Header1: value1" "Header2: value2"
+  -l, --level {pages,chapters,books} [{pages,chapters,books} ...]
                         Space separated list of levels at which should be export performed.
-  --force-update-files  Set this option to skip checking local files timestamps against remote
-                        last edit timestamps. This will cause overwriting local files, even if
-                        they seem to be already in newest version.
-  --images              Download images and place them in dedicated directory in export path
-                        root, preserving their internal paths
-  --markdown-images     The same as --images, but will also update image links in exported
-                        markdown files (if they are bein exported). Warning: this is
-                        experimental, as API does not provide a way to know what images are
-                        actually on the page. Therefore for markdown data all ']({URL}'
-                        occurences will be replaced with local, relative path to images, and
-                        additionally any '/scaled-\d+-/' regex match will be replaced with '/'
-                        so that scaled images are also displayed
+  --force-update-files  Set this option to skip checking local files timestamps against remote last edit
+                        timestamps. This will cause overwriting local files, even if they seem to be
+                        already in newest version.
+  --images              Download images and place them in dedicated directory in export path root,
+                        preserving their internal paths
+  --markdown-images     The same as --images, but will also update image links in exported markdown files
+                        (if they are bein exported). Warning: this is experimental, as API does not
+                        provide a way to know what images are actually on the page. Therefore for
+                        markdown data all ']({URL}' and '<img src={URL}' occurences will be replaced with
+                        local, relative path to images, and additionally any '/scaled-\d+-/' regex match
+                        will be replaced with '/' so that scaled images are also displayed
   --images-dir IMAGES_DIR
-                        When exporting images, they will be organized in directory located at
-                        the same path as exported document. This parameter defines name of
-                        this directory.
+                        When exporting images, they will be organized in directory located at the same
+                        path as exported document. This parameter defines name of this directory.
   --skip-broken-image-links
-                        Don't fail and skip downloading images if their url obtained from
-                        images gallery API seem broken (image cannot be downloaded OR fails to
-                        download).
+                        Don't fail and skip downloading images if their url obtained from images gallery
+                        API seem broken (image cannot be downloaded OR fails to download).
   --dont-export-attachments
                         Set this to prevent exporting any attachments.
   --dont-export-external-attachments
                         Set this to prevent exporting external attachments (from links).
-  -V {debug,info,warning,error}, --log-level {debug,info,warning,error}
+  -V, --log-level {debug,info,warning,error}
                         Set verbosity level.
 ```
 
