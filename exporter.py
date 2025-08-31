@@ -122,7 +122,7 @@ parser.add_argument(
     "exported markdown files (if they are bein exported)."
     " Warning: this is experimental, as API does not provide a way to "
     "know what images are actually on the page. Therefore for markdown data"
-    " all ']({URL}' occurences will be replaced with local, relative "
+    " all ']({URL}' and '<img src={URL}' occurences will be replaced with local, relative "
     "path to images, and additionally any '/scaled-\\d+-/' regex match"
     " will be replaced with '/' so that scaled images are also displayed")
 parser.add_argument('--images-dir',
@@ -456,12 +456,17 @@ def update_markdown_image_tags(doc: Node, data: bytes) -> bytes:
     levels = doc.parents_levels()
     # "](" is a part of markdown image tag, used here to
     # try preventing replacing host url in other paces
-    dir_fallback = ']('
-    dir_fallback += '../' * levels
+    dir_fallback_md = ']('
+    dir_fallback_md += '../' * levels
+    dir_fallback_md += args.images_dir
+    dir_fallback_html = '<img src="'
+    dir_fallback_html += '../' * levels
+    dir_fallback_html += args.images_dir
 
     host = removesuffix(args.host, '/')
-    dir_fallback += args.images_dir
-    data = data.replace(f']({host}'.encode(), dir_fallback.encode())
+    data = data.replace(f']({host}'.encode(), dir_fallback_md.encode())
+    data = data.replace(f'<img src="{host}'.encode(), dir_fallback_html.encode())
+    print("md images")
     data_str = re.sub(r'/scaled-\d+-/', r'/', data.decode())
     return data_str.encode()
 
