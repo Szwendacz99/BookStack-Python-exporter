@@ -458,15 +458,14 @@ def update_markdown_image_tags(doc: Node, data: bytes) -> bytes:
     # try preventing replacing host url in other paces
     dir_fallback_md = ']('
     dir_fallback_md += '../' * levels
-    dir_fallback_md += args.images_dir
+    dir_fallback_md += args.images_dir + "/uploads/images/"
     dir_fallback_html = '<img src="'
     dir_fallback_html += '../' * levels
-    dir_fallback_html += args.images_dir
+    dir_fallback_html += args.images_dir + "/uploads/images/"
 
     host = removesuffix(args.host, '/')
-    data = data.replace(f']({host}'.encode(), dir_fallback_md.encode())
-    data = data.replace(f'<img src="{host}'.encode(), dir_fallback_html.encode())
-    print("md images")
+    data = data.replace(f']({host}/uploads/images/'.encode(), dir_fallback_md.encode())
+    data = data.replace(f'<img src="{host}/uploads/images/'.encode(), dir_fallback_html.encode())
     data_str = re.sub(r'/scaled-\d+-/', r'/', data.decode())
     return data_str.encode()
 
